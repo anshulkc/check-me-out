@@ -1,0 +1,72 @@
+// AI Settings for Body Composition Analysis
+// This file configures the AI model parameters and processing pipeline
+
+import Foundation
+import CoreML
+import Vision
+
+struct BodyCompositionAISettings {
+    // MARK: - Model Configuration
+    
+    // Core ML model settings
+    static let modelName = "BodyCompositionAnalyzer"
+    static let modelVersion = "1.0.0"
+    static let confidenceThreshold: Float = 0.85
+    
+    // Input requirements
+    static let requiredImageResolution = CGSize(width: 1024, height: 1024)
+    static let supportedImageFormats = ["jpg", "png", "heic"]
+    static let requiredPerspectives = ["front", "side"]
+    
+    // MARK: - Processing Pipeline
+    
+    // Preprocessing settings
+    static let imageNormalizationMean: [Float] = [0.485, 0.456, 0.406]
+    static let imageNormalizationStd: [Float] = [0.229, 0.224, 0.225]
+    static let backgroundRemovalEnabled = true
+    static let noiseReductionLevel: Float = 0.3
+    
+    // Body landmark detection
+    static let requiredLandmarks = [
+        "shoulders", "chest", "waist", "hips", "thighs", 
+        "calves", "arms", "neck"
+    ]
+    static let landmarkDetectionConfidenceThreshold: Float = 0.75
+    
+    // MARK: - Output Configuration
+    
+    // Result presentation
+    static let outputMetrics = [
+        "bodyFatPercentage",
+        "leanMusclePercentage",
+        "visceralFatLevel",
+        "bodyMassIndex"
+    ]
+    
+    static let bodyFatPercentageRange = 5.0...50.0
+    static let resultPrecision = 1 // decimal places
+    
+    // MARK: - Privacy and Security
+    
+    static let dataRetentionPeriodDays = 30
+    static let encryptScanData = true
+    static let anonymizeResults = false
+    
+    // MARK: - Validation
+    
+    static let validationMethod = "crossValidation"
+    static let validationSplitRatio = 0.8 // 80% training, 20% validation
+    static let minimumValidationAccuracy = 0.92
+    
+    // MARK: - Hardware Requirements
+    
+    static let minimumDeviceGeneration = "iPhone 12"
+    static let requiresNeuralEngine = true
+    static let thermalThrottlingProtection = true
+    
+    // MARK: - User Experience
+    
+    static let guidedScanningEnabled = true
+    static let scanTimeoutSeconds = 30
+    static let userFeedbackLevel = "detailed" // "minimal", "standard", "detailed"
+} 
