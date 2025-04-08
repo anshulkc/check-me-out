@@ -8,6 +8,7 @@
 import AVFoundation
 import UIKit
 import CoreImage
+import Vision
 
 class DepthCaptureManager: NSObject {
     // MARK: - Properties
@@ -21,6 +22,7 @@ class DepthCaptureManager: NSObject {
     
     private var currentDepthPixelBuffer: CVPixelBuffer?
     private var currentColorPixelBuffer: CVPixelBuffer?
+    private var frameCounter = 0
     
     var previewLayer: AVCaptureVideoPreviewLayer?
     
@@ -40,6 +42,15 @@ class DepthCaptureManager: NSObject {
                 continuation.yield(ciImage)
             }
         }
+    }()
+    
+    // Add body detection callback
+    var onFrameProcessed: ((UIImage, Bool) -> Void)?
+    
+    // Add body detection request
+    private lazy var bodyDetectionRequest: VNDetectHumanBodyPoseRequest = {
+        let request = VNDetectHumanBodyPoseRequest()
+        return request
     }()
     
     // MARK: - Initialization
@@ -354,6 +365,68 @@ extension DepthCaptureManager: AVCaptureVideoDataOutputSampleBufferDelegate {
             
             // Send to preview stream
             addToPreviewStream?(ciImage)
+            
+            // Process for body detection (not on every frame to save resources)
+            frameCounter += 1
+            if frameCounter % 10 == 0 { // Process every 10th frame
+                detectBodyInFrame(pixelBuffer)
+            }
         }
+    }
+    
+    private func detectBodyInFrame(_ pixelBuffer: CVPixelBuffer) {
+        let requestHandler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .right, options: [:])
+        
+        do {
+            try requestHandler.perform([bodyDetectionRequest])
+            
+            if let results = bodyDetectionRequest.results, !results.isEmpty {
+                // Check if we can see enough of the body
+                let bodyPose = results[0]
+                let bodyDetected = isFullBodyVisible(bodyPose)
+                
+                // Create a UIImage from the pixel buffer for the callback
+                let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+                let context = CIContext()
+                guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return }
+                let image = UIImage(cgImage: cgImage)
+                
+                // Call the callback with the detection result
+                onFrameProcessed?(image, bodyDetected)
+            } else {
+                // No body detected
+                onFrameProcessed?(UIImage(), false)
+            }
+        } catch {
+            print("Body detection failed: \(error.localizedDescription)")
+            onFrameProcessed?(UIImage(), false)
+        }
+    }
+    
+    private func isFullBodyVisible(_ bodyPose: VNHumanBodyPoseObservation) -> Bool {
+        // Check if key points are visible to determine if full body is in frame
+        let jointsOfInterest: [VNHumanBodyPoseObservation.JointName] = [
+            .nose,
+            .neck,
+            .rightShoulder,
+            .leftShoulder,
+            .rightHip,
+            .leftHip,
+            .rightKnee,
+            .leftKnee,
+            .rightAnkle,
+            .leftAnkle
+        ]
+        
+        var visibleJointCount = 0
+        
+        for joint in jointsOfInterest {
+            if let point = try? bodyPose.recognizedPoint(joint), point.confidence > 0.7 {
+                visibleJointCount += 1
+            }
+        }
+        
+        // Consider full body visible if at least 8 out of 10 key joints are detected
+        return visibleJointCount >= 8
     }
 } 

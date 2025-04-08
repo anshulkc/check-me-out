@@ -7,6 +7,7 @@
 
 import SwiftUI
 import AVFoundation
+import Foundation
 
 struct BodyScanView: View {
     @StateObject private var viewModel = BodyScanViewModel()
@@ -608,8 +609,6 @@ class BodyScanViewModel: ObservableObject {
             self.alertTitle = "Scan Complete"
             self.alertMessage = "Body composition analysis complete!\n\nEstimated body fat: \(String(format: "%.1f%%", bodyFatPercentage))\nLean muscle mass: \(String(format: "%.1f%%", leanMusclePercentage))\nVisceral fat level: \(visceralFatLevel)"
             self.showAlert = true
-            
-            // Note: We don't reset here anymore, as it will be handled by the view when the alert is dismissed
         }
     }
     

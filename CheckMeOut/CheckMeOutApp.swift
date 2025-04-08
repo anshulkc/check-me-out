@@ -24,19 +24,25 @@ struct MainTabView: View {
         TabView {
             ContentView()
                 .tabItem {
-                    Label("Home", systemImage: "house")
+                    Label("Home", systemImage: "house.fill")
                 }
             
-            BodyScanView()
+            ChallengesView()
                 .tabItem {
-                    Label("Body Scan", systemImage: "camera")
+                    Label("Challenges", systemImage: "trophy.fill")
+                }
+            
+            Text("Leaderboard")
+                .tabItem {
+                    Label("Leaderboard", systemImage: "chart.bar.fill")
                 }
             
             SettingsView()
                 .tabItem {
-                    Label("Settings", systemImage: "gear")
+                    Label("Profile", systemImage: "person.fill")
                 }
         }
+        .accentColor(.black)
     }
 }
 
