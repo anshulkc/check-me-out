@@ -67,6 +67,29 @@ class AppDataStore: ObservableObject {
         addFeedItem(username: "John D.", userAvatar: "person.circle.fill", activityType: "meal", imageData: nil, points: 50)
         addFeedItem(username: "Sarah M.", userAvatar: "person.circle.fill", activityType: "workout", imageData: nil, points: 100)
     }
+    
+    func addThreadedPost(originalPost: FeedItem, responseText: String, responseImage: UIImage?) {
+        let responseImageData = responseImage?.jpegData(compressionQuality: 0.7)
+        
+        // Create a new threaded post
+        let newItem = FeedItem(
+            username: "You",
+            userAvatar: "person.circle.fill",
+            activityType: "thread",
+            timestamp: Date(),
+            imageData: originalPost.imageData,
+            likes: Int.random(in: 0...30),
+            comments: Int.random(in: 0...5),
+            points: 100,
+            caption: originalPost.caption,
+            originalPostID: originalPost.id,
+            threadResponseText: responseText.isEmpty ? nil : responseText,
+            threadResponseImageData: responseImageData
+        )
+        
+        // Add to the beginning of the feed
+        feedItems.insert(newItem, at: 0)
+    }
 }
 
 struct ContentView: View {
@@ -116,6 +139,10 @@ struct ContentView: View {
                         
                         NavigationLink(destination: BodyScanView()) {
                             QuickActionButtonContent(icon: "camera", title: "Body\nCheck")
+                        }
+                        
+                        NavigationLink(destination: FriendRoastView()) {
+                            QuickActionButtonContent(icon: "flame.fill", title: "Roast\nFriend")
                         }
                     }
                     .padding(.horizontal)
@@ -189,9 +216,10 @@ struct FeedItemView: View {
                     .frame(width: 36, height: 36)
                     .foregroundColor(.gray)
                 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(item.username)
-                        .font(.headline)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
                     
                     Text(timeAgo(from: item.timestamp))
                         .font(.caption)
@@ -200,24 +228,19 @@ struct FeedItemView: View {
                 
                 Spacer()
                 
-                // Points badge
-                if item.points != 0 {
-                    Text(item.points > 0 ? "+\(item.points)" : "\(item.points)")
-                        .font(.caption)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(item.points > 0 ? Color.black : Color.red)
-                        .cornerRadius(12)
-                }
+                // Activity type badge
+                Text(activityTypeText(item.activityType))
+                    .font(.caption)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.gray.opacity(0.1))
+                    .cornerRadius(12)
             }
             
             // Caption if available
-            if let caption = item.caption, !caption.isEmpty {
+            if let caption = item.caption {
                 Text(caption)
-                    .font(.body)
-                    .padding(.vertical, 4)
+                    .font(.subheadline)
             }
             
             // Image if available
@@ -229,14 +252,50 @@ struct FeedItemView: View {
                     .cornerRadius(12)
             }
             
-            // Activity type, likes and comments
-            HStack {
-                Text(activityTypeText(item.activityType))
-                    .font(.caption)
-                    .padding(.horizontal, 8)
+            // Thread response if this is a threaded post
+            if item.isThreaded {
+                Divider()
                     .padding(.vertical, 4)
-                    .background(Color.gray.opacity(0.1))
-                    .cornerRadius(12)
+                
+                HStack {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.5))
+                        .frame(width: 2)
+                        .padding(.leading, 18)
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        if let responseText = item.threadResponseText {
+                            Text(responseText)
+                                .font(.subheadline)
+                                .padding(.leading, 8)
+                        }
+                        
+                        if let responseImageData = item.threadResponseImageData, 
+                           let responseImage = UIImage(data: responseImageData) {
+                            Image(uiImage: responseImage)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxHeight: 200)
+                                .cornerRadius(8)
+                                .padding(.leading, 8)
+                        }
+                    }
+                }
+            }
+            
+            // Points, likes, comments
+            HStack {
+                // Points display
+                HStack {
+                    Text("\(item.points > 0 ? "+" : "")\(item.points) pts")
+                        .font(.caption)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(item.points >= 0 ? Color.black : Color.red)
+                .cornerRadius(12)
                 
                 Spacer()
                 
@@ -256,29 +315,39 @@ struct FeedItemView: View {
         .padding(.horizontal)
     }
     
-    private func timeAgo(from date: Date) -> String {
-        let hours = Calendar.current.dateComponents([.hour], from: date, to: Date()).hour ?? 0
-        if hours < 1 {
-            return "Just now"
-        } else if hours < 2 {
-            return "1h ago"
-        } else if hours < 24 {
-            return "\(hours)h ago"
+    // Helper functions
+    func timeAgo(from date: Date) -> String {
+        let calendar = Calendar.current
+        let now = Date()
+        let components = calendar.dateComponents([.minute, .hour, .day], from: date, to: now)
+        
+        if let day = components.day, day > 0 {
+            return day == 1 ? "Yesterday" : "\(day) days ago"
+        } else if let hour = components.hour, hour > 0 {
+            return "\(hour) hour\(hour == 1 ? "" : "s") ago"
+        } else if let minute = components.minute, minute > 0 {
+            return "\(minute) minute\(minute == 1 ? "" : "s") ago"
         } else {
-            return "\(hours / 24)d ago"
+            return "Just now"
         }
     }
     
-    private func activityTypeText(_ type: String) -> String {
+    func activityTypeText(_ type: String) -> String {
         switch type {
         case "meal":
-            return "Meal Photo"
+            return "Meal"
         case "workout":
-            return "Workout Photo"
+            return "Workout"
         case "bodycheck":
-            return "Body Check Photo"
+            return "Body Check"
+        case "roast":
+            return "Roast"
+        case "thread":
+            return "Thread"
+        case "shamed":
+            return "Shamed"
         default:
-            return "Activity Photo"
+            return type.capitalized
         }
     }
 }
