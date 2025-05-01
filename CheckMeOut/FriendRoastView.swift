@@ -10,19 +10,27 @@ import UIKit
 
 struct FriendRoastView: View {
     @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
     @ObservedObject private var dataStore = AppDataStore.shared
     @State private var selectedPost: FeedItem? = nil
-    @State private var roastText = ""
+    @State private var responseText = ""
     @State private var showingMemeOptions = false
     @State private var showingImagePicker = false
     @State private var customMemeImage: UIImage? = nil
     @State private var showingAlert = false
+    @State private var viewAppeared = false
+    var fromChallenge: Bool = false
     
     // Filter posts from friends (not your own posts)
     var friendPosts: [FeedItem] {
-        return dataStore.feedItems.filter { 
-            $0.username != "You" && $0.imageData != nil 
-        }
+        // The viewAppeared property is accessed to ensure this computed property
+        // is reevaluated whenever the view appears
+        _ = viewAppeared
+        
+        return dataStore.feedItems
+        // .filter { 
+         //   $0.username != "You" 
+       // }
     }
     
     var body: some View {
@@ -30,35 +38,35 @@ struct FriendRoastView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     // Header
-                    Text("Roast a Friend")
-                        .font(.title2)
+                    Text("Respond to Posts")
+                        .font(.tagesschriftTitle2)
                         .fontWeight(.bold)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal)
                         .padding(.top, 12)
                     
                     // Instructions
-                    Text("Select a post to roast")
-                        .font(.subheadline)
+                    Text("Scroll through posts and select one to respond to")
+                        .font(.tagesschriftSubheadline)
                         .foregroundColor(.gray)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal)
                     
-                    // Friend posts grid
+                    // Friend posts feed
                     if friendPosts.isEmpty {
                         VStack(spacing: 12) {
                             Image(systemName: "exclamationmark.circle")
                                 .font(.system(size: 40))
                                 .foregroundColor(.gray)
-                            Text("No friend posts to roast yet")
+                            Text("No posts to respond to yet")
                                 .foregroundColor(.gray)
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 40)
                     } else {
-                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                        VStack(spacing: 16) {
                             ForEach(friendPosts) { post in
-                                PostThumbnail(post: post, isSelected: selectedPost?.id == post.id) {
+                                SelectableFeedItemView(post: post, isSelected: selectedPost?.id == post.id) {
                                     if selectedPost?.id == post.id {
                                         selectedPost = nil
                                     } else {
@@ -91,7 +99,7 @@ struct FriendRoastView: View {
                                         .font(.subheadline)
                                         .fontWeight(.semibold)
                                     
-                                    Text(activityTypeText(selectedPost.activityType))
+                                    Text(FriendRoastView.activityTypeText(selectedPost.activityType))
                                         .font(.caption)
                                         .foregroundColor(.gray)
                                 }
@@ -113,24 +121,39 @@ struct FriendRoastView: View {
                                     .frame(maxHeight: 200)
                                     .cornerRadius(8)
                                     .padding(.horizontal)
+                            } else {
+                                // Placeholder for posts without images
+                                VStack(spacing: 12) {
+                                    Image(systemName: FriendRoastView.activityTypeIcon(selectedPost.activityType))
+                                        .font(.system(size: 46))
+                                        .foregroundColor(.gray)
+                                    Text("No image for this post")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                }
+                                .frame(height: 120)
+                                .frame(maxWidth: .infinity)
+                                .background(Color.gray.opacity(0.1))
+                                .cornerRadius(8)
+                                .padding(.horizontal)
                             }
                         }
                         
                         Divider()
                             .padding(.vertical, 8)
                         
-                        // Roast options
+                        // Response options
                         VStack(alignment: .leading, spacing: 16) {
                             Text("Your Response")
                                 .font(.headline)
                                 .padding(.horizontal)
                             
-                            // Text roast option
+                            // Text response option
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("Write a roast")
+                                Text("Write your response")
                                     .font(.subheadline)
                                 
-                                TextField("Your savage comment...", text: $roastText)
+                                TextField("Your comment...", text: $responseText)
                                     .padding()
                                     .background(Color.gray.opacity(0.1))
                                     .cornerRadius(8)
@@ -179,20 +202,20 @@ struct FriendRoastView: View {
                             }
                             
                             // Submit button
-                            Button(action: submitRoast) {
-                                Text("Post Response (+100 pts)")
+                            Button(action: submitResponse) {
+                                Text("Send Response (+\(fromChallenge ? 100 : 50) pts)")
                                     .font(.headline)
                                     .foregroundColor(.white)
                                     .frame(maxWidth: .infinity)
                                     .padding()
                                     .background(
-                                        (roastText.isEmpty && customMemeImage == nil) 
+                                        (responseText.isEmpty && customMemeImage == nil) 
                                             ? Color.gray 
                                             : Color.black
                                     )
                                     .cornerRadius(12)
                             }
-                            .disabled(roastText.isEmpty && customMemeImage == nil)
+                            .disabled(responseText.isEmpty && customMemeImage == nil)
                             .padding(.horizontal)
                             .padding(.top, 8)
                         }
@@ -206,88 +229,199 @@ struct FriendRoastView: View {
             .alert(isPresented: $showingAlert) {
                 Alert(
                     title: Text("Response Posted!"),
-                    message: Text("You earned 100 points for your savage response. It's now at the top of the feed."),
-                    dismissButton: .default(Text("Savage!")) {
-                        presentationMode.wrappedValue.dismiss()
+                    message: Text("You earned \(fromChallenge ? 100 : 50) points for your response.\(fromChallenge ? " Challenge completed!" : "")"),
+                    dismissButton: .default(Text("OK")) {
+                        // Use the newer dismiss environment value
+                        dismiss()
+                        
+                        // Reset state for next time
+                        selectedPost = nil
+                        responseText = ""
+                        customMemeImage = nil
                     }
                 )
             }
-            .navigationBarItems(leading: Button("Cancel") {
-                presentationMode.wrappedValue.dismiss()
-            })
             .navigationBarTitle("", displayMode: .inline)
+            .onAppear {
+                // Force view refresh when appearing
+                viewAppeared = true
+                
+                // Reset selection when view appears
+                if selectedPost != nil && !friendPosts.contains(where: { $0.id == selectedPost?.id }) {
+                    selectedPost = nil
+                }
+            }
         }
     }
     
-    func submitRoast() {
+    func submitResponse() {
         guard let post = selectedPost else { return }
         
         // Create thread post that references the original post
         dataStore.addThreadedPost(
             originalPost: post,
-            responseText: roastText,
+            responseText: responseText,
             responseImage: customMemeImage
         )
         
-        // Add points to user
-        dataStore.totalPoints += 100
+        // Points to award (more if from challenge)
+        let points = fromChallenge ? 100 : 50
         
+        // Add points to user
+        dataStore.totalPoints += points
+        
+        // If this is from a challenge, mark it as completed
+        if fromChallenge {
+            // Complete the challenge
+            dataStore.completeChallenge("Respond to a friend's post")
+            
+            // Add a feed item showing the friend received your response
+            let friendName = post.username
+            
+            dataStore.addFeedItem(
+                username: friendName,
+                userAvatar: "person.circle.fill",
+                activityType: "received_response",
+                imageData: nil,
+                points: 10,  // Small points for receiving a response
+                caption: "Received your response",
+                fromChallenge: true
+            )
+        }      
         // Show confirmation
         showingAlert = true
     }
     
-    func activityTypeText(_ type: String) -> String {
+    static func activityTypeText(_ type: String) -> String {
         switch type {
         case "meal":
-            return "Meal"
+            return "Logged a meal"
         case "workout":
-            return "Workout"
+            return "Completed a workout"
         case "bodycheck":
-            return "Body Check"
-        case "roast":
-            return "Roast"
+            return "Posted a body scan"
+        case "thread":
+            return "Responded to a post"
+        case "received_response":
+            return "Received response"
         case "shamed":
-            return "Shamed"
+            return "Got feedback"
         default:
-            return type.capitalized
+            return "Posted an update"
+        }
+    }
+    
+    static func activityTypeIcon(_ type: String) -> String {
+        switch type {
+        case "meal":
+            return "fork.knife"
+        case "workout":
+            return "dumbbell"
+        case "bodycheck":
+            return "camera.fill"
+        case "thread":
+            return "bubble.right"
+        case "received_response":
+            return "bell.fill"
+        case "shamed":
+            return "bubble.left.fill"
+        default:
+            return "doc.text"
         }
     }
 }
 
-struct PostThumbnail: View {
+struct SelectableFeedItemView: View {
     let post: FeedItem
     let isSelected: Bool
     let action: () -> Void
     
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 8) {
-                if let imageData = post.imageData, let uiImage = UIImage(data: imageData) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(height: 120)
-                        .clipped()
-                        .cornerRadius(8)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(isSelected ? Color.black : Color.clear, lineWidth: 3)
-                        )
-                }
-                
-                HStack {
-                    Text(post.username)
-                        .font(.caption)
-                        .fontWeight(.medium)
+            VStack(alignment: .leading, spacing: 12) {
+                // Feed item content
+                VStack(alignment: .leading, spacing: 10) {
+                    // User info and timestamp
+                    HStack {
+                        Image(systemName: post.userAvatar)
+                            .resizable()
+                            .frame(width: 36, height: 36)
+                            .foregroundColor(.gray)
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(post.username)
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                            
+                            Text(SelectableFeedItemView.timeAgo(from: post.timestamp))
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                        
+                        Spacer()
+                        
+                        // Activity type badge
+                        Text(FriendRoastView.activityTypeText(post.activityType))
+                            .font(.caption)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(12)
+                    }
                     
-                    Spacer()
+                    // Caption
+                    if let caption = post.caption {
+                        Text(caption)
+                            .font(.subheadline)
+                    }
                     
-                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .foregroundColor(isSelected ? .black : .gray)
+                    // Image
+                    if let imageData = post.imageData, let uiImage = UIImage(data: imageData) {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxHeight: 200)
+                            .cornerRadius(8)
+                    }
+                    
+                    // Points and stats
+                    HStack(spacing: 16) {
+                        Button(action: {
+                            AppDataStore.shared.toggleLike(for: post.id)
+                        }) {
+                            Label("\(post.likes)", systemImage: AppDataStore.shared.isPostLiked(post.id) ? "heart.fill" : "heart")
+                                .font(.caption)
+                                .foregroundColor(AppDataStore.shared.isPostLiked(post.id) ? .red : .secondary)
+                        }
+                        
+                        Spacer()
+                        
+                        Text("+\(post.points) pts")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.secondary)
+                    }
                 }
-                .padding(.horizontal, 4)
+                .padding(12)
+                .background(Color.white)
+                .cornerRadius(12)
+                .shadow(color: isSelected ? Color.black.opacity(0.2) : Color.black.opacity(0.05), 
+                       radius: isSelected ? 8 : 5, 
+                       x: 0, y: 2)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(isSelected ? Color.black : Color.clear, lineWidth: 2)
+                )
             }
         }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    // Helper function to format time
+    static func timeAgo(from date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 }
 

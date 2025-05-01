@@ -15,13 +15,14 @@ struct MealLogView: View {
     @State private var mealCaption = ""
     @State private var showingCamera = false
     @State private var showingAlert = false
+    var fromChallenge: Bool = false
     
     var body: some View {
         NavigationView {
             VStack(spacing: 24) {
                 // Header
                 Text("Log Your Meal")
-                    .font(.title2)
+                    .font(.tagesschriftTitle2)
                     .fontWeight(.bold)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal)
@@ -46,6 +47,7 @@ struct MealLogView: View {
                                         .font(.system(size: 40))
                                         .foregroundColor(.gray)
                                     Text("Tap to add a photo")
+                                        .font(.tagesschriftCaption)
                                         .foregroundColor(.gray)
                                 }
                             )
@@ -60,9 +62,10 @@ struct MealLogView: View {
                 // Caption field
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Caption")
-                        .font(.headline)
+                        .font(.tagesschriftHeadline)
                     
                     TextField("What are you eating?", text: $mealCaption)
+                        .font(.tagesschrift(size: 16))
                         .padding()
                         .background(Color.gray.opacity(0.1))
                         .cornerRadius(8)
@@ -74,7 +77,7 @@ struct MealLogView: View {
                 // Submit button
                 Button(action: submitMeal) {
                     Text("Log Meal (+50 pts)")
-                        .font(.headline)
+                        .font(.tagesschriftHeadline)
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding()
@@ -95,21 +98,21 @@ struct MealLogView: View {
             }
             .alert(isPresented: $showingAlert) {
                 Alert(
-                    title: Text("Meal Logged!"),
-                    message: Text("You earned 50 points for logging your meal."),
+                    title: Text("Meal Logged!").font(.tagesschrift(size: 18)),
+                    message: Text("You earned \(fromChallenge ? 100 : 50) points for logging your meal.\(fromChallenge ? " Challenge completed!" : "")").font(.tagesschrift(size: 14)),
                     dismissButton: .default(Text("OK")) {
                         presentationMode.wrappedValue.dismiss()
                     }
                 )
             }
-            .navigationBarItems(leading: Button("Cancel") {
-                presentationMode.wrappedValue.dismiss()
-            })
         }
     }
     
     func submitMeal() {
         guard let image = inputImage else { return }
+        
+        // Points to award (more if from challenge)
+        let points = fromChallenge ? 100 : 50
         
         // Add to feed with caption
         dataStore.addFeedItem(
@@ -117,14 +120,15 @@ struct MealLogView: View {
             userAvatar: "person.circle.fill",
             activityType: "meal",
             imageData: image.jpegData(compressionQuality: 0.7),
-            points: 50,
-            caption: mealCaption.isEmpty ? nil : mealCaption
+            points: points,
+            caption: mealCaption.isEmpty ? nil : mealCaption,
+            fromChallenge: fromChallenge
         )
         
         // Add points
-        dataStore.totalPoints += 50
+        dataStore.totalPoints += points
         
-        // Show confirmation
+        // Show confirmation with appropriate message
         showingAlert = true
     }
 }
@@ -138,6 +142,23 @@ struct ImagePicker: UIViewControllerRepresentable {
         picker.delegate = context.coordinator
         picker.sourceType = sourceType
         picker.allowsEditing = true
+        
+        // Explicitly set camera device to avoid warnings and reduce hang time
+        if sourceType == .camera {
+            // Check which camera devices are available and use the most reliable option
+            if UIImagePickerController.isCameraDeviceAvailable(.rear) {
+                picker.cameraDevice = .rear
+            } else if UIImagePickerController.isCameraDeviceAvailable(.front) {
+                picker.cameraDevice = .front
+            }
+            
+            // Set camera mode explicitly to photo to avoid any video configuration issues
+            picker.cameraCaptureMode = .photo
+            
+            // Set flash mode to auto
+            picker.cameraFlashMode = .auto
+        }
+        
         return picker
     }
     

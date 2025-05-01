@@ -13,6 +13,8 @@ class AppDataStore: ObservableObject {
     @Published var scanLogs: [ScanLog] = []
     @Published var feedItems: [FeedItem] = []
     @Published var totalPoints: Int = 1250
+    @Published var completedChallenges: Set<String> = []
+    @Published var likedPosts: Set<String> = []
     
     static let shared = AppDataStore()
     
@@ -24,7 +26,8 @@ class AppDataStore: ObservableObject {
     }
     
     func addScanLog(bodyFatPercentage: Double, leanMusclePercentage: Double, 
-                   visceralFatLevel: String, frontImage: UIImage?, sideImage: UIImage?) {
+                   visceralFatLevel: String, frontImage: UIImage?, sideImage: UIImage?, 
+                   fromChallenge: Bool = false) {
         let frontImageData = frontImage?.jpegData(compressionQuality: 0.7)
         let sideImageData = sideImage?.jpegData(compressionQuality: 0.7)
         
@@ -39,27 +42,69 @@ class AppDataStore: ObservableObject {
         
         scanLogs.append(newLog)
         
+        // Points to award
+        let points = fromChallenge ? 100 : 75
+        
         // Also add to feed
-        addFeedItem(username: "You", userAvatar: "person.circle.fill", activityType: "bodycheck", imageData: frontImageData, points: 75)
+        addFeedItem(username: "You", userAvatar: "person.circle.fill", activityType: "bodycheck", imageData: frontImageData, points: points)
         
         // Add points
-        totalPoints += 75
+        totalPoints += points
+        
+        // If this was from a challenge, mark it as completed
+        if fromChallenge {
+            completeChallenge("Post a scan of yourself")
+        }
     }
     
-    func addFeedItem(username: String, userAvatar: String, activityType: String, imageData: Data?, points: Int, caption: String? = nil) {
+    func addFeedItem(username: String, userAvatar: String, activityType: String, imageData: Data?, points: Int, caption: String? = nil, fromChallenge: Bool = false) {
         let newItem = FeedItem(
             username: username,
             userAvatar: userAvatar,
             activityType: activityType,
             timestamp: Date(),
             imageData: imageData,
-            likes: Int.random(in: 0...30),
-            comments: Int.random(in: 0...5),
+            likes: 0,
+            comments: 0,
             points: points,
             caption: caption
         )
         
         feedItems.insert(newItem, at: 0)
+    }
+    
+    // Method to like or unlike a post
+    func toggleLike(for postID: UUID, isThreadResponse: Bool = false) {
+        // Find the post
+        if let index = feedItems.firstIndex(where: { $0.id == postID }) {
+            let likeID = isThreadResponse ? "\(postID)-response" : postID.uuidString
+            
+            // Check if post/response is already liked
+            if likedPosts.contains(likeID) {
+                // Unlike the post
+                if isThreadResponse {
+                    feedItems[index].threadResponseLikes -= 1
+                } else {
+                    feedItems[index].likes -= 1
+                }
+                likedPosts.remove(likeID) // Remove like
+            } else {
+                // Like the post
+                if isThreadResponse {
+                    feedItems[index].threadResponseLikes += 1
+                } else {
+                    feedItems[index].likes += 1
+                }
+                likedPosts.insert(likeID) // Mark post as liked
+            }
+            objectWillChange.send()
+        }
+    }
+    
+    // Check if a post or thread response is liked
+    func isPostLiked(_ postID: UUID, isThreadResponse: Bool = false) -> Bool {
+        let likeID = isThreadResponse ? "\(postID)-response" : postID.uuidString
+        return likedPosts.contains(likeID)
     }
     
     private func addSampleFeedItems() {
@@ -68,23 +113,35 @@ class AppDataStore: ObservableObject {
         addFeedItem(username: "Sarah M.", userAvatar: "person.circle.fill", activityType: "workout", imageData: nil, points: 100)
     }
     
+    // Method to mark a challenge as completed
+    func completeChallenge(_ challengeTitle: String) {
+        completedChallenges.insert(challengeTitle)
+        objectWillChange.send()
+    }
+    
+    // Method to check if a challenge is completed
+    func isChallengeCompleted(_ challengeTitle: String) -> Bool {
+        return completedChallenges.contains(challengeTitle)
+    }
+    
     func addThreadedPost(originalPost: FeedItem, responseText: String, responseImage: UIImage?) {
         let responseImageData = responseImage?.jpegData(compressionQuality: 0.7)
         
-        // Create a new threaded post
+        // Create a new threaded post - keep original likes and comments
         let newItem = FeedItem(
             username: "You",
             userAvatar: "person.circle.fill",
             activityType: "thread",
             timestamp: Date(),
             imageData: originalPost.imageData,
-            likes: Int.random(in: 0...30),
-            comments: Int.random(in: 0...5),
+            likes: originalPost.likes, // Use the original post's likes
+            comments: originalPost.comments, // Use the original post's comments
             points: 100,
             caption: originalPost.caption,
             originalPostID: originalPost.id,
             threadResponseText: responseText.isEmpty ? nil : responseText,
-            threadResponseImageData: responseImageData
+            threadResponseImageData: responseImageData,
+            threadResponseLikes: 0 // Start with 0 likes for the response
         )
         
         // Add to the beginning of the feed
@@ -94,88 +151,167 @@ class AppDataStore: ObservableObject {
 
 struct ContentView: View {
     @ObservedObject private var dataStore = AppDataStore.shared
+    @State private var navigationPath = NavigationPath()
 
     var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(spacing: 20) {
-                    // Points and profile section
-                    HStack {
-                        Text("Track Progress")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                        
-                        Spacer()
-                        
-                        // Points pill
-                        HStack(spacing: 4) {
-                            Text("\(dataStore.totalPoints) pts")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.white)
+            NavigationStack(path: $navigationPath) {
+                ScrollView {
+                    VStack(spacing: 20) {
+                        // Points and profile section
+                        HStack {
+                            Text("Track Progress")
+                                .font(.tagesschrift(size: 22))
+                                .fontWeight(.bold)
+                            
+                            Spacer()
+                            
+                            // Points pill
+                            HStack(spacing: 4) {
+                                Text("\(dataStore.totalPoints) pts")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.white)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color(UIColor.darkGray))
+                            .cornerRadius(20)
+                            
+                            // Profile icon
+                            Image(systemName: "person.circle.fill")
+                                .resizable()
+                                .frame(width: 30, height: 30)
+                                .foregroundColor(.gray)
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color(UIColor.darkGray))
-                        .cornerRadius(20)
+                        .padding(.horizontal)
                         
-                        // Profile icon
-                        Image(systemName: "person.circle.fill")
-                            .resizable()
-                            .frame(width: 30, height: 30)
-                            .foregroundColor(.gray)
-                    }
-                    .padding(.horizontal)
-                    
-                    // Quick action buttons
-                    HStack(spacing: 15) {
-                        NavigationLink(destination: MealLogView()) {
-                            QuickActionButtonContent(icon: "fork.knife", title: "Log Meal")
+                        // Quick action buttons
+                        HStack(spacing: 15) {
+                            Button {
+                                navigationPath.append("mealLog")
+                            } label: {
+                                QuickActionButtonContent(icon: "fork.knife", title: "Log\nMeal")
+                            }
+                            
+                            Button {
+                                navigationPath.append("workoutLog")
+                            } label: {
+                                QuickActionButtonContent(icon: "dumbbell", title: "Log\nWorkout")
+                            }
+                            
+                            Button {
+                                navigationPath.append("bodyScan")
+                            } label: {
+                                QuickActionButtonContent(icon: "camera", title: "Body\nCheck")
+                            }
+                            
+                            Button {
+                                navigationPath.append("friendRoast")
+                            } label: {
+                                QuickActionButtonContent(icon: "flame.fill", title: "Roast\nFriend")
+                            }
+                        }
+                        .padding(.horizontal)
+                        
+                        // Today's feed section
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Today's Feed")
+                                .font(.tagesschrift(size: 22))
+                                .fontWeight(.bold)
+                                .padding(.horizontal)
+                            
+                            // Feed items
+                            ForEach(dataStore.feedItems.prefix(5)) { item in
+                                FeedItemView(item: item)
+                            }
+                            
+                            Button {
+                                navigationPath.append("allFeed")
+                            } label: {
+                                Text("View All")
+                                    .font(.tagesschrift(size: 16))
+                                    .foregroundColor(.blue)
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(Color(.systemGray6))
+                                    .cornerRadius(10)
+                                    .padding(.horizontal)
+                            }
                         }
                         
-                        NavigationLink(destination: WorkoutLogView()) {
-                            QuickActionButtonContent(icon: "dumbbell", title: "Log\nWorkout")
-                        }
-                        
-                        NavigationLink(destination: BodyScanView()) {
-                            QuickActionButtonContent(icon: "camera", title: "Body\nCheck")
-                        }
-                        
-                        NavigationLink(destination: FriendRoastView()) {
-                            QuickActionButtonContent(icon: "flame.fill", title: "Roast\nFriend")
-                        }
-                    }
-                    .padding(.horizontal)
-                    
-                    // Today's feed section
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Today's Feed")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .padding(.horizontal)
-                        
-                        // Feed items
-                        ForEach(dataStore.feedItems) { item in
-                            FeedItemView(item: item)
+                        // Recent scans section
+                        VStack(alignment: .leading, spacing: 15) {
+                            Text("Recent Scans")
+                                .font(.tagesschrift(size: 22))
+                                .fontWeight(.bold)
+                                .padding(.horizontal)
+                            
+                            if dataStore.scanLogs.isEmpty {
+                                Text("No scans yet. Take your first body scan to track your progress!")
+                                    .font(.tagesschrift(size: 14))
+                                    .foregroundColor(.gray)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding()
+                            } else {
+                                VStack(spacing: 10) {
+                                    ForEach(dataStore.scanLogs.prefix(3)) { log in
+                                        Button {
+                                            navigationPath.append(log)
+                                        } label: {
+                                            ScanLogRow(log: log)
+                                        }
+                                    }
+                                }
+                                .padding(.horizontal, 0)
+                                
+                                if dataStore.scanLogs.count > 3 {
+                                    Button {
+                                        navigationPath.append("allScans")
+                                    } label: {
+                                        Text("View All Scans")
+                                            .font(.headline)
+                                            .foregroundColor(.blue)
+                                            .frame(maxWidth: .infinity)
+                                            .padding()
+                                            .background(Color(.systemGray6))
+                                            .cornerRadius(10)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
-                .padding(.top)
+                .navigationTitle("CheckMeOut")
+                .toolbarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .principal) {
+                        Text("CheckMeOut")
+                            .font(.tagesschrift(size: 16))
+                            .foregroundColor(.primary)
+                    }
+                }
+                .navigationDestination(for: String.self) { destination in
+                    switch destination {
+                    case "mealLog":
+                        MealLogView()
+                    case "workoutLog":
+                        WorkoutLogView()
+                    case "bodyScan":
+                        BodyScanView()
+                    case "friendRoast":
+                        FriendRoastView()
+                    case "allFeed":
+                        AllFeedView()
+                    case "allScans":
+                        Text("All Scans")
+                    default:
+                        Text("Page not found")
+                    }
+                }
+                .navigationDestination(for: ScanLog.self) { log in
+                    ScanDetailView(log: log)
+                }
             }
-            .navigationBarHidden(true)
-        }
-    }
-}
-
-struct QuickActionButton: View {
-    let icon: String
-    let title: String
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            QuickActionButtonContent(icon: icon, title: title)
-        }
     }
 }
 
@@ -192,7 +328,7 @@ struct QuickActionButtonContent: View {
                 .foregroundColor(.black)
             
             Text(title)
-                .font(.system(size: 14, weight: .medium))
+                .font(.tagesschrift(size: 14))
                 .multilineTextAlignment(.center)
                 .foregroundColor(.black)
         }
@@ -218,11 +354,11 @@ struct FeedItemView: View {
                 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(item.username)
-                        .font(.subheadline)
+                        .font(.tagesschrift(size: 14))
                         .fontWeight(.semibold)
                     
                     Text(timeAgo(from: item.timestamp))
-                        .font(.caption)
+                        .font(.tagesschrift(size: 12))
                         .foregroundColor(.gray)
                 }
                 
@@ -230,7 +366,7 @@ struct FeedItemView: View {
                 
                 // Activity type badge
                 Text(activityTypeText(item.activityType))
-                    .font(.caption)
+                    .font(.tagesschrift(size: 12))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(Color.gray.opacity(0.1))
@@ -240,7 +376,7 @@ struct FeedItemView: View {
             // Caption if available
             if let caption = item.caption {
                 Text(caption)
-                    .font(.subheadline)
+                    .font(.tagesschrift(size: 14))
             }
             
             // Image if available
@@ -266,7 +402,7 @@ struct FeedItemView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         if let responseText = item.threadResponseText {
                             Text(responseText)
-                                .font(.subheadline)
+                                .font(.tagesschrift(size: 14))
                                 .padding(.leading, 8)
                         }
                         
@@ -278,6 +414,21 @@ struct FeedItemView: View {
                                 .frame(maxHeight: 200)
                                 .cornerRadius(8)
                                 .padding(.leading, 8)
+                        }
+                        
+                        // Thread response like button
+                        HStack {
+                            Spacer()
+                            
+                            Button(action: {
+                                AppDataStore.shared.toggleLike(for: item.id, isThreadResponse: true)
+                            }) {
+                                Label("\(item.threadResponseLikes)", systemImage: AppDataStore.shared.isPostLiked(item.id, isThreadResponse: true) ? "heart.fill" : "heart")
+                                    .font(.caption)
+                                    .foregroundColor(AppDataStore.shared.isPostLiked(item.id, isThreadResponse: true) ? .red : .black)
+                            }
+                            .padding(.trailing, 8)
+                            .padding(.top, 4)
                         }
                     }
                 }
@@ -299,12 +450,12 @@ struct FeedItemView: View {
                 
                 Spacer()
                 
-                HStack(spacing: 12) {
-                    Label("\(item.likes)", systemImage: "heart")
+                Button(action: {
+                    AppDataStore.shared.toggleLike(for: item.id)
+                }) {
+                    Label("\(item.likes)", systemImage: AppDataStore.shared.isPostLiked(item.id) ? "heart.fill" : "heart")
                         .font(.caption)
-                    
-                    Label("\(item.comments)", systemImage: "bubble.right")
-                        .font(.caption)
+                        .foregroundColor(AppDataStore.shared.isPostLiked(item.id) ? .red : .black)
                 }
             }
         }
@@ -353,6 +504,59 @@ struct FeedItemView: View {
 }
 
 // Keep the existing ScanLog-related views
+// ScanLogRow component for displaying scan logs in a list
+struct ScanLogRow: View {
+    let log: ScanLog
+    
+    var body: some View {
+        HStack {
+            // Thumbnail of front image
+            if let imageData = log.frontImageData, let uiImage = UIImage(data: imageData) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 60, height: 60)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.gray.opacity(0.3))
+                    .frame(width: 60, height: 60)
+                    .overlay(Image(systemName: "photo").foregroundColor(.gray))
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(formattedDate(log.timestamp))
+                    .font(.tagesschriftHeadline)
+                
+                Text("Body Fat: \(String(format: "%.1f%%", log.bodyFatPercentage))")
+                    .font(.tagesschriftSubheadline)
+                    .foregroundColor(.secondary)
+                
+                Text("Muscle Mass: \(String(format: "%.1f%%", log.leanMusclePercentage))")
+                    .font(.tagesschriftSubheadline)
+                    .foregroundColor(.secondary)
+            }
+            
+            Spacer()
+            
+            Image(systemName: "chevron.right")
+                .foregroundColor(.gray)
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 16)
+        .background(Color(.systemBackground))
+        .cornerRadius(10)
+        .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
+        .padding(.horizontal)
+    }
+    
+    private func formattedDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter.string(from: date)
+    }
+}
+
 struct ScanDetailView: View {
     let log: ScanLog
     
@@ -361,7 +565,7 @@ struct ScanDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 Text("Scan Results")
-                    .font(.largeTitle)
+                    .font(.tagesschriftTitle)
                     .bold()
                     .padding(.top)
                 
@@ -373,7 +577,7 @@ struct ScanDetailView: View {
                 }
                 
                 Text("Scan Images")
-                    .font(.title2)
+                    .font(.tagesschriftTitle2)
                     .bold()
                     .padding(.top)
                 

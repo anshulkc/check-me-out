@@ -53,10 +53,12 @@ class DepthCaptureManager: NSObject {
         return request
     }()
     
+    
     // MARK: - Initialization
     
     override init() {
         super.init()
+        // We'll still setup the capture session, but won't start it until permissions are granted
         setupCaptureSession()
     }
     
@@ -146,54 +148,157 @@ class DepthCaptureManager: NSObject {
         previewLayer?.videoGravity = .resizeAspectFill
         print("Preview layer created")
         
-        // Start the session immediately
-        startSession()
     }
     
     private func getBestCamera() -> AVCaptureDevice? {
+        print("Attempting to find best camera device")
+        
         // Try to get TrueDepth front camera first (best for body scanning)
         if let device = AVCaptureDevice.default(.builtInTrueDepthCamera, for: .video, position: .front) {
             isUsingFrontCamera = true
+            print("Found TrueDepth front camera: \(device.localizedName)")
             return device
         }
         
         // Fall back to dual camera if available
         if let device = AVCaptureDevice.default(.builtInDualCamera, for: .video, position: .back) {
             isUsingFrontCamera = false
+            print("Found dual back camera: \(device.localizedName)")
             return device
         }
         
-        // Last resort: any wide angle camera
-        let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
-        isUsingFrontCamera = device?.position == .front
-        return device
+        // Try wide angle front camera
+        if let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front) {
+            isUsingFrontCamera = true
+            print("Found wide angle front camera: \(device.localizedName)")
+            return device
+        }
+        
+        // Last resort: any wide angle back camera
+        if let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) {
+            isUsingFrontCamera = false
+            print("Found wide angle back camera: \(device.localizedName)")
+            return device
+        }
+        
+        print("No camera device found")
+        return nil
     }
     
     // MARK: - Session Control
     
+    // Add a session state property to track if session is ready
+    @Published var isSessionRunning = false
+    private var sessionStartTime: Date? = nil
+    
+    // Add a property to track camera permission status
+    @Published var cameraPermissionGranted = false
+    
     func startSession() {
-        if !captureSession.isRunning {
-            print("Starting camera session...")
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                self?.captureSession.startRunning()
+        // First check camera permissions
+        checkCameraPermissions { [weak self] granted in
+            guard let self = self else { return }
+            
+            self.cameraPermissionGranted = granted
+            
+            // Only proceed if permission is granted
+            if granted {
+                if !self.captureSession.isRunning {
+                    print("Starting camera session...")
+                    self.sessionStartTime = Date()
+                    print("Camera session state before starting: \(self.captureSession.isRunning)")
+                    
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        print("About to call startRunning() on background thread")
+                        self.captureSession.startRunning()
+                        print("startRunning() completed, checking state: \(self.captureSession.isRunning)")
+                        
+                        DispatchQueue.main.async {
+                            self.isSessionRunning = self.captureSession.isRunning
+                            print("Camera session state on main thread: \(self.captureSession.isRunning)")
+                            print("isSessionRunning property updated to: \(self.isSessionRunning)")
+                            
+                            // Add a delayed check to see if the session state changes after a short delay
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                                print("Camera session state after 1 second: \(self.captureSession.isRunning)")
+                            }
+                        }
+                    }
+                } else {
+                    self.isSessionRunning = true
+                    print("Camera session already running")
+                }
+            } else {
+                print("Camera permission denied - cannot start session")
+                // Notify the view model that camera permission was denied
                 DispatchQueue.main.async {
-                    print("Camera session started: \(self?.captureSession.isRunning ?? false)")
+                    self.onCaptureError?(NSError(domain: "DepthCaptureManager", code: 2, userInfo: [NSLocalizedDescriptionKey: "Camera permission denied"]))
                 }
             }
-        } else {
-            print("Camera session already running")
         }
     }
     
     func stopSession() {
         if captureSession.isRunning {
             captureSession.stopRunning()
+            isSessionRunning = false
+        }
+    }
+    
+    // Check camera permissions and request if needed
+    private func checkCameraPermissions(completion: @escaping (Bool) -> Void) {
+        let status = AVCaptureDevice.authorizationStatus(for: .video)
+        print("Current camera permission status: \(status.rawValue)")
+        
+        switch status {
+        case .authorized:
+            // Permission already granted
+            print("Camera permission already granted")
+            completion(true)
+            
+        case .notDetermined:
+            // Permission not requested yet, request it
+            print("Requesting camera permission...")
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                print("Camera permission request result: \(granted)")
+                completion(granted)
+            }
+            
+        case .denied, .restricted:
+            // Permission denied or restricted
+            print("Camera permission denied or restricted")
+            completion(false)
+            
+        @unknown default:
+            print("Unknown camera permission status: \(status.rawValue)")
+            completion(false)
         }
     }
     
     // MARK: - Capture Methods
     
     func capturePhoto() {
+        // Check if the session is running before attempting to capture
+        guard captureSession.isRunning else {
+            print("Cannot capture photo - camera session is not running")
+            onCaptureError?(NSError(domain: "com.checkmeout", code: 1001, userInfo: [NSLocalizedDescriptionKey: "Camera session is not running"]))
+            return
+        }
+        
+        // Add a minimum delay to ensure the session is fully initialized
+        if let startTime = sessionStartTime, Date().timeIntervalSince(startTime) < 1.0 {
+            // If session was started less than 1 second ago, wait briefly
+            print("Camera session just started, waiting briefly before capture...")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                self?.performPhotoCapture()
+            }
+            return
+        }
+        
+        performPhotoCapture()
+    }
+    
+    private func performPhotoCapture() {
         // Configure photo settings
         var photoSettings: AVCapturePhotoSettings
         
@@ -355,7 +460,15 @@ extension DepthCaptureManager: AVCaptureDepthDataOutputDelegate {
 extension DepthCaptureManager: AVCaptureVideoDataOutputSampleBufferDelegate {
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         if output == videoDataOutput {
-            guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+            guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+                print("Failed to get pixel buffer from sample buffer")
+                return
+            }
+            
+            // Log first frame received
+            if frameCounter == 0 {
+                print("First video frame received from camera")
+            }
             
             // Create CIImage from pixel buffer
             let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
@@ -370,6 +483,11 @@ extension DepthCaptureManager: AVCaptureVideoDataOutputSampleBufferDelegate {
             frameCounter += 1
             if frameCounter % 10 == 0 { // Process every 10th frame
                 detectBodyInFrame(pixelBuffer)
+            }
+            
+            // Log every 100 frames to confirm continuous operation
+            if frameCounter % 100 == 0 {
+                print("Received \(frameCounter) frames from camera")
             }
         }
     }
@@ -429,4 +547,5 @@ extension DepthCaptureManager: AVCaptureVideoDataOutputSampleBufferDelegate {
         // Consider full body visible if at least 8 out of 10 key joints are detected
         return visibleJointCount >= 8
     }
-} 
+    
+}

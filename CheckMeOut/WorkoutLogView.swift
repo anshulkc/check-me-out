@@ -15,13 +15,14 @@ struct WorkoutLogView: View {
     @State private var workoutCaption = ""
     @State private var showingCamera = false
     @State private var showingAlert = false
+    var fromChallenge: Bool = false
     
     var body: some View {
         NavigationView {
             VStack(spacing: 24) {
                 // Header
                 Text("Log Your Workout")
-                    .font(.title2)
+                    .font(.tagesschriftTitle2)
                     .fontWeight(.bold)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal)
@@ -46,6 +47,7 @@ struct WorkoutLogView: View {
                                         .font(.system(size: 40))
                                         .foregroundColor(.gray)
                                     Text("Tap to add a photo")
+                                        .font(.tagesschriftBody)
                                         .foregroundColor(.gray)
                                 }
                             )
@@ -60,9 +62,10 @@ struct WorkoutLogView: View {
                 // Caption field
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Caption")
-                        .font(.headline)
+                        .font(.tagesschriftHeadline)
                     
                     TextField("What are you working on today?", text: $workoutCaption)
+                        .font(.tagesschrift(size: 16))
                         .padding()
                         .background(Color.gray.opacity(0.1))
                         .cornerRadius(8)
@@ -74,7 +77,7 @@ struct WorkoutLogView: View {
                 // Submit button
                 Button(action: submitWorkout) {
                     Text("Log Workout (+50 pts)")
-                        .font(.headline)
+                        .font(.tagesschriftHeadline)
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding()
@@ -95,21 +98,21 @@ struct WorkoutLogView: View {
             }
             .alert(isPresented: $showingAlert) {
                 Alert(
-                    title: Text("Workout Logged!"),
-                    message: Text("You earned 50 points for logging your workout."),
+                    title: Text("Workout Logged!").font(.tagesschrift(size: 18)),
+                    message: Text("You earned \(fromChallenge ? 100 : 50) points for logging your workout.\(fromChallenge ? " Challenge completed!" : "")").font(.tagesschrift(size: 14)),
                     dismissButton: .default(Text("OK")) {
                         presentationMode.wrappedValue.dismiss()
                     }
                 )
             }
-            .navigationBarItems(leading: Button("Cancel") {
-                presentationMode.wrappedValue.dismiss()
-            })
         }
     }
     
     func submitWorkout() {
         guard let image = inputImage else { return }
+        
+        // Points to award (more if from challenge)
+        let points = fromChallenge ? 100 : 50
         
         // Add to feed with caption
         dataStore.addFeedItem(
@@ -117,14 +120,15 @@ struct WorkoutLogView: View {
             userAvatar: "person.circle.fill",
             activityType: "workout",
             imageData: image.jpegData(compressionQuality: 0.7),
-            points: 50,
-            caption: workoutCaption.isEmpty ? nil : workoutCaption
+            points: points,
+            caption: workoutCaption.isEmpty ? nil : workoutCaption,
+            fromChallenge: fromChallenge
         )
         
         // Add points
-        dataStore.totalPoints += 50
+        dataStore.totalPoints += points
         
-        // Show confirmation
+        // Show confirmation with appropriate message
         showingAlert = true
     }
 }

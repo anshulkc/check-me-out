@@ -13,12 +13,16 @@ struct Challenge: Identifiable {
     let description: String
     let points: Int
     let iconName: String
-    let isCompleted: Bool
+    var isCompleted: Bool
     let negativeEffect: String?
 }
 
 struct ChallengesView: View {
     @ObservedObject private var dataStore = AppDataStore.shared
+    @State private var showingBodyScanView = false
+    @State private var showingMealLogView = false
+    @State private var showingWorkoutLogView = false
+    @State private var showingFriendRoastView = false
     @State private var challenges = [
         Challenge(
             title: "Post a scan of yourself",
@@ -55,13 +59,12 @@ struct ChallengesView: View {
     ]
     
     var body: some View {
-        NavigationView {
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(spacing: 16) {
                     // Header with total points
                     HStack {
                         Text("Daily Challenges")
-                            .font(.title2)
+                            .font(.tagesschriftTitle)
                             .fontWeight(.bold)
                         
                         Spacer()
@@ -69,7 +72,7 @@ struct ChallengesView: View {
                         // Points pill
                         HStack(spacing: 4) {
                             Text("\(dataStore.totalPoints) pts")
-                                .font(.subheadline)
+                                .font(.tagesschriftSubheadline)
                                 .fontWeight(.semibold)
                                 .foregroundColor(.white)
                         }
@@ -79,50 +82,53 @@ struct ChallengesView: View {
                         .cornerRadius(20)
                     }
                     .padding(.horizontal)
-                    .padding(.top)
                     
                     // Challenge cards
                     ForEach(challenges) { challenge in
                         ChallengeCard(challenge: challenge) {
-                            completeChallenge(challenge)
+                            startChallenge(challenge)
                         }
                     }
                 }
                 .padding(.bottom)
+
             }
-            .navigationBarHidden(true)
-        }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("CheckMeOut")
+                        .font(.tagesschrift(size: 18))
+                        .foregroundColor(.primary)
+                }
+            }
+            .sheet(isPresented: $showingBodyScanView, onDismiss: updateChallengeStatus) {
+                BodyScanView(fromChallenge: true)
+            }
+            .sheet(isPresented: $showingMealLogView, onDismiss: updateChallengeStatus) {
+                MealLogView(fromChallenge: true)
+            }
+            .sheet(isPresented: $showingWorkoutLogView, onDismiss: updateChallengeStatus) {
+                WorkoutLogView(fromChallenge: true)
+            }
+            .sheet(isPresented: $showingFriendRoastView, onDismiss: updateChallengeStatus) {
+                FriendRoastView(fromChallenge: true)
+            }
     }
     
-    private func completeChallenge(_ challenge: Challenge) {
-        // Find and update the challenge
-        if let index = challenges.firstIndex(where: { $0.id == challenge.id }) {
-            var updatedChallenge = challenge
-            updatedChallenge = Challenge(
-                title: challenge.title,
-                description: challenge.description,
-                points: challenge.points,
-                iconName: challenge.iconName,
-                isCompleted: true,
-                negativeEffect: challenge.negativeEffect
-            )
-            
-            challenges[index] = updatedChallenge
-            
-            // Add points to user
-            dataStore.totalPoints += challenge.points
-            
-            // Add to feed
-            dataStore.addFeedItem(
-                username: "You", 
-                userAvatar: "person.circle.fill", 
-                activityType: getChallengeActivityType(challenge), 
-                imageData: nil, 
-                points: challenge.points
-            )
-            
-            // Handle specific challenge actions
-            handleSpecificChallengeActions(challenge)
+    private func startChallenge(_ challenge: Challenge) {
+        // Handle specific challenge actions without marking as completed yet
+        handleSpecificChallengeActions(challenge)
+    }
+    
+    // This will be called when returning to this view
+    private func updateChallengeStatus() {
+        // Update challenges based on completed status in dataStore
+        for (index, challenge) in challenges.enumerated() {
+            if dataStore.isChallengeCompleted(challenge.title) && !challenge.isCompleted {
+                var updatedChallenge = challenge
+                updatedChallenge.isCompleted = true
+                challenges[index] = updatedChallenge
+            }
         }
     }
     
@@ -142,113 +148,99 @@ struct ChallengesView: View {
     private func handleSpecificChallengeActions(_ challenge: Challenge) {
         switch challenge.title {
         case "Post a scan of yourself":
-            // Navigate to body scan view
-            // This would typically be handled with a navigation link
-            break
+            // Navigate to body scan view with fromChallenge flag
+            showingBodyScanView = true
             
         case "Take a picture at the gym":
-            // This would be handled by a navigation link to WorkoutLogView
-            // For now, we'll just simulate completing the challenge
-            break
+            // Navigate to workout log view
+            showingWorkoutLogView = true
             
         case "Shame a friend":
-            // Show friend selection UI
-            // For now, we'll just simulate it
-            let friendName = ["John D.", "Sarah M.", "Mike T.", "Emma R."].randomElement()!
-            
-            // Add a feed item for the shamed friend
-            dataStore.addFeedItem(
-                username: friendName,
-                userAvatar: "person.circle.fill",
-                activityType: "shamed",
-                imageData: nil,
-                points: -50
-            )
-            
-            break
+            // Navigate to friend roast view
+            showingFriendRoastView = true
             
         case "Log a meal":
-            // This would be handled by a navigation link to MealLogView
-            break
+            // Navigate to meal log view
+            showingMealLogView = true
             
         default:
             break
         }
     }
-}
-
-struct ChallengeCard: View {
-    let challenge: Challenge
-    let action: () -> Void
     
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                // Challenge icon
-                Image(systemName: challenge.iconName)
-                    .font(.system(size: 24))
-                    .foregroundColor(.black)
-                    .frame(width: 40, height: 40)
-                    .background(Color.gray.opacity(0.2))
-                    .clipShape(Circle())
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(challenge.title)
-                        .font(.headline)
-                    
-                    Text(challenge.description)
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
-                }
-                
-                Spacer()
-            }
-            
-            HStack {
-                // Points display
+    struct ChallengeCard: View {
+        let challenge: Challenge
+        let action: () -> Void
+        
+        var body: some View {
+            VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text("+\(challenge.points) pts")
-                        .font(.subheadline)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
+                    // Challenge icon
+                    Image(systemName: challenge.iconName)
+                        .font(.tagesschriftBody)
+                        .foregroundColor(.black)
+                        .frame(width: 40, height: 40)
+                        .background(Color.gray.opacity(0.2))
+                        .clipShape(Circle())
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(challenge.title)
+                            .font(.tagesschriftTitle)
+                        
+                        Text(challenge.description)
+                            .font(.tagesschriftSubheadline)
+                            .foregroundColor(.gray)
+                    }
+                    
+                    Spacer()
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color.black)
-                .cornerRadius(20)
                 
-                if let negativeEffect = challenge.negativeEffect {
-                    Text(negativeEffect)
-                        .font(.caption)
-                        .foregroundColor(.red)
+                HStack {
+                    // Points display
+                    HStack {
+                        Text("+\(challenge.points) pts")
+                            .font(.tagesschriftSubheadline)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.black)
+                    .cornerRadius(20)
+                    
+                    if let negativeEffect = challenge.negativeEffect {
+                        Text(negativeEffect)
+                            .font(.tagesschriftCaption)
+                            .foregroundColor(.red)
+                    }
+                    
+                    Spacer()
+                    
+                    // Complete button
+                    Button(action: action) {
+                        Text(challenge.isCompleted ? "Completed" : "Start Challenge")
+                            .font(.tagesschriftSubheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(challenge.isCompleted ? .gray : .white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(challenge.isCompleted ? Color.gray.opacity(0.3) : Color.black)
+                            .cornerRadius(20)
+                    }
+                    .disabled(challenge.isCompleted)
                 }
-                
-                Spacer()
-                
-                // Complete button
-                Button(action: action) {
-                    Text(challenge.isCompleted ? "Completed" : "Complete")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(challenge.isCompleted ? .gray : .white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(challenge.isCompleted ? Color.gray.opacity(0.3) : Color.black)
-                        .cornerRadius(20)
-                }
-                .disabled(challenge.isCompleted)
             }
+            .padding()
+            .background(Color.white)
+            .cornerRadius(12)
+            .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
+            .padding(.horizontal)
         }
-        .padding()
-        .background(Color.white)
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
-        .padding(.horizontal)
+    }
+    
+    struct ChallengesView_Previews: PreviewProvider {
+        static var previews: some View {
+            ChallengesView()
+        }
     }
 }
-
-struct ChallengesView_Previews: PreviewProvider {
-    static var previews: some View {
-        ChallengesView()
-    }
-} 

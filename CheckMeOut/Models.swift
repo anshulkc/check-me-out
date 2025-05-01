@@ -16,7 +16,7 @@ struct FeedItem: Identifiable {
     let activityType: String // "meal", "workout", "bodycheck", "roast", "thread"
     let timestamp: Date
     let imageData: Data?
-    let likes: Int
+    var likes: Int
     let comments: Int
     let points: Int
     let caption: String? // Optional caption for posts
@@ -26,6 +26,7 @@ struct FeedItem: Identifiable {
     let originalPostID: UUID?
     let threadResponseText: String?
     let threadResponseImageData: Data?
+    var threadResponseLikes: Int // Separate likes for the response portion
     
     // Default initializer for regular posts
     init(username: String, userAvatar: String, activityType: String, timestamp: Date, imageData: Data?, likes: Int, comments: Int, points: Int, caption: String? = nil) {
@@ -42,10 +43,11 @@ struct FeedItem: Identifiable {
         self.originalPostID = nil
         self.threadResponseText = nil
         self.threadResponseImageData = nil
+        self.threadResponseLikes = 0
     }
     
     // Initializer for threaded posts
-    init(username: String, userAvatar: String, activityType: String, timestamp: Date, imageData: Data?, likes: Int, comments: Int, points: Int, caption: String? = nil, originalPostID: UUID, threadResponseText: String?, threadResponseImageData: Data?) {
+    init(username: String, userAvatar: String, activityType: String, timestamp: Date, imageData: Data?, likes: Int, comments: Int, points: Int, caption: String? = nil, originalPostID: UUID, threadResponseText: String?, threadResponseImageData: Data?, threadResponseLikes: Int = 0) {
         self.username = username
         self.userAvatar = userAvatar
         self.activityType = activityType
@@ -59,11 +61,12 @@ struct FeedItem: Identifiable {
         self.originalPostID = originalPostID
         self.threadResponseText = threadResponseText
         self.threadResponseImageData = threadResponseImageData
+        self.threadResponseLikes = threadResponseLikes
     }
 }
 
 // Define a model for our scan logs
-struct ScanLog: Identifiable {
+struct ScanLog: Identifiable, Hashable {
     let id = UUID()
     let timestamp: Date
     let bodyFatPercentage: Double
@@ -71,4 +74,14 @@ struct ScanLog: Identifiable {
     let visceralFatLevel: String
     let frontImageData: Data?
     let sideImageData: Data?
+    
+    // Implement Hashable conformance
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+    
+    // Implement Equatable (required by Hashable)
+    static func == (lhs: ScanLog, rhs: ScanLog) -> Bool {
+        return lhs.id == rhs.id
+    }
 } 

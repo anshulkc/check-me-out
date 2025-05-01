@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 @main
 struct CheckMeOutApp: App {
@@ -20,27 +21,46 @@ struct CheckMeOutApp: App {
 }
 
 struct MainTabView: View {
+    // State to track navigation paths for each tab
+    @State private var homeNavigationPath = NavigationPath()
+    @State private var challengesNavigationPath = NavigationPath()
+    @State private var leaderboardNavigationPath = NavigationPath()
+    @State private var profileNavigationPath = NavigationPath()
+    
     var body: some View {
         TabView {
-            ContentView()
-                .tabItem {
-                    Label("Home", systemImage: "house.fill")
-                }
+            // Home tab with NavigationStack
+            NavigationStack(path: $homeNavigationPath) {
+                ContentView()
+            }
+            .tabItem {
+                Label("Home", systemImage: "house.fill")
+            }
             
-            ChallengesView()
-                .tabItem {
-                    Label("Challenges", systemImage: "trophy.fill")
-                }
+            // Challenges tab with NavigationStack
+            NavigationStack(path: $challengesNavigationPath) {
+                ChallengesView()
+            }
+            .tabItem {
+                Label("Challenges", systemImage: "trophy.fill")
+            }
             
-            Text("Leaderboard")
-                .tabItem {
-                    Label("Leaderboard", systemImage: "chart.bar.fill")
-                }
+            // Leaderboard tab with NavigationStack
+            NavigationStack(path: $leaderboardNavigationPath) {
+                Text("Leaderboard")
+                    .font(.tagesschriftTitle)
+            }
+            .tabItem {
+                Label("Leaderboard", systemImage: "chart.bar.fill")
+            }
             
-            SettingsView()
-                .tabItem {
-                    Label("Profile", systemImage: "person.fill")
-                }
+            // Profile tab with NavigationStack
+            NavigationStack(path: $profileNavigationPath) {
+                SettingsView()
+            }
+            .tabItem {
+                Label("Profile", systemImage: "person.fill")
+            }
         }
         .accentColor(.black)
     }
@@ -53,10 +73,10 @@ struct SettingsView: View {
     @AppStorage("userGender") private var userGender = "Male"
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             Form {
-                Section(header: Text("Personal Information")) {
-                    Picker("Gender", selection: $userGender) {
+                Section(header: Text("Personal Information").font(.tagesschrift(size: 16)).foregroundColor(.primary)) {
+                    Picker(selection: $userGender, label: Text("Gender")) {
                         Text("Male").tag("Male")
                         Text("Female").tag("Female")
                         Text("Other").tag("Other")
@@ -81,13 +101,13 @@ struct SettingsView: View {
                     }
                 }
                 
-                Section(header: Text("Scan Settings")) {
+                Section(header: Text("Scan Settings").font(.tagesschrift(size: 16)).foregroundColor(.primary)) {
                     Toggle("High Resolution Scan", isOn: .constant(true))
                     Toggle("Save Scan History", isOn: .constant(true))
                     Toggle("Show Detailed Results", isOn: .constant(true))
                 }
                 
-                Section(header: Text("Privacy")) {
+                Section(header: Text("Privacy").font(.tagesschrift(size: 16)).foregroundColor(.primary)) {
                     Toggle("Encrypt Scan Data", isOn: .constant(true))
                     Button("Delete All Scan Data") {
                         // Add confirmation dialog and deletion logic
@@ -95,11 +115,11 @@ struct SettingsView: View {
                     .foregroundColor(.red)
                 }
                 
-                Section(header: Text("About")) {
+                Section(header: Text("About").font(.tagesschrift(size: 16)).foregroundColor(.primary)) {
                     HStack {
-                        Text("Version")
+                        Text("Version").font(.tagesschrift(size: 16))
                         Spacer()
-                        Text("1.0.0")
+                        Text("1.0.0").font(.tagesschrift(size: 14))
                             .foregroundColor(.gray)
                     }
                     
@@ -113,6 +133,15 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("CheckMeOut")
+                        .font(.tagesschrift(size: 16))
+                        .foregroundColor(.primary)
+                }
+            }
         }
     }
+    
 }

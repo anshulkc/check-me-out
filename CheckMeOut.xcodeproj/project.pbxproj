@@ -29,9 +29,22 @@
 		AF0E2E992D9E22D00070F440 /* CheckMeOutUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CheckMeOutUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		AF92A3C62DC20F5800734900 /* Exceptions for "CheckMeOut" folder in "CheckMeOut" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = AF0E2E792D9E22CE0070F440 /* CheckMeOut */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		AF0E2E7C2D9E22CE0070F440 /* CheckMeOut */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				AF92A3C62DC20F5800734900 /* Exceptions for "CheckMeOut" folder in "CheckMeOut" target */,
+			);
 			path = CheckMeOut;
 			sourceTree = "<group>";
 		};
@@ -399,6 +412,9 @@
 				DEVELOPMENT_TEAM = AR6537V5RM;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = CheckMeOut/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "";
+				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to capture depth data for body composition analysis.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -430,6 +446,9 @@
 				DEVELOPMENT_TEAM = AR6537V5RM;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = CheckMeOut/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "";
+				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to capture depth data for body composition analysis.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;

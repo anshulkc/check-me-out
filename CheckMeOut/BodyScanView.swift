@@ -8,11 +8,24 @@
 import SwiftUI
 import AVFoundation
 import Foundation
+import Vision
 
 struct BodyScanView: View {
-    @StateObject private var viewModel = BodyScanViewModel()
+    @StateObject private var viewModel: BodyScanViewModel
     @State private var showingInstructions = true
     @State private var currentScanPerspective = "front"
+    @State private var navigateToResults = false
+    @State private var isCountingDown = false
+    @State private var countdownValue = 5
+    @EnvironmentObject var dataStore: AppDataStore
+    var fromChallenge: Bool = false
+    
+    init(fromChallenge: Bool = false) {
+        self.fromChallenge = fromChallenge
+        let viewModel = BodyScanViewModel()
+        viewModel.fromChallenge = fromChallenge
+        self._viewModel = StateObject(wrappedValue: viewModel)
+    }
     
     var body: some View {
         ZStack {
@@ -28,7 +41,7 @@ struct BodyScanView: View {
             VStack {
                 // Scan perspective indicator at the top
                 Text("Current scan: \(currentScanPerspective.capitalized)")
-                    .font(.headline)
+                    .font(.tagesschriftHeadline)
                     .padding(.vertical, 8)
                     .padding(.horizontal, 16)
                     .background(Color.black.opacity(0.7))
@@ -38,22 +51,58 @@ struct BodyScanView: View {
                 
                 Spacer() // Push content to top and bottom
                 
-                // Capture button at the bottom
-                Button(action: {
-                    viewModel.captureImage()
-                }) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.white)
-                            .frame(width: 70, height: 70)
+                VStack {
+                    Spacer()
+                    
+                    HStack {
+                        Spacer()
                         
-                        Circle()
-                            .stroke(Color.white, lineWidth: 2)
-                            .frame(width: 80, height: 80)
+                        // Capture button
+                        Button(action: {
+                            if !isCountingDown && viewModel.isCameraReady {
+                                startCountdown()
+                            } else if !viewModel.isCameraReady {
+                                // Show a message that camera is initializing
+                                viewModel.alertTitle = "Camera Initializing"
+                                viewModel.alertMessage = "Please wait a moment while the camera is preparing..."
+                                viewModel.showAlert = true
+                            }
+                        }) {
+                            Circle()
+                                .fill(Color.white)
+                                .frame(width: 70, height: 70)
+                                .overlay(
+                                    Circle()
+                                        .stroke(Color.black, lineWidth: 2)
+                                        .frame(width: 60, height: 60)
+                                )
+                        }
+                        .disabled(viewModel.isProcessing)
+                        
+                        Spacer()
                     }
+                    .padding(.bottom, 30)
                 }
-                .padding(.bottom, 30)
-                .disabled(viewModel.isProcessing)
+                
+                // Navigation destination is now moved to the ZStack level
+            }
+            
+            // Countdown overlay
+            if isCountingDown {
+                Color.black.opacity(0.7)
+                    .edgesIgnoringSafeArea(.all)
+                
+                VStack {
+                    Text("\(countdownValue)")
+                        .font(.system(size: 120, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .padding()
+                    
+                    Text("Get ready!")
+                        .font(.title2)
+                        .foregroundColor(.white)
+                        .padding()
+                }
             }
             
             // Processing overlay
@@ -78,27 +127,44 @@ struct BodyScanView: View {
                 InstructionsView(isShowing: $showingInstructions)
             }
         }
+        .navigationDestination(isPresented: $navigateToResults) {
+            ScanResultsView(
+                frontImage: viewModel.frontImageWithPosePoints ?? viewModel.frontImage,
+                sideImage: viewModel.sideImageWithPosePoints ?? viewModel.sideImage,
+                fromChallenge: fromChallenge,
+                dataStore: AppDataStore.shared  // Pass the data store directly as a parameter
+            )
+        }
         .alert(isPresented: $viewModel.showAlert) {
             Alert(
                 title: Text(viewModel.alertTitle),
                 message: Text(viewModel.alertMessage),
                 dismissButton: .default(Text("OK")) {
-                    // Check if this is the completion alert and reset if needed
-                    if viewModel.alertTitle == "Scan Complete" {
-                        resetForNewScan()
+                    if viewModel.scanComplete {
+                        if currentScanPerspective == "front" {
+                            // Switch to side perspective for the second scan
+                            currentScanPerspective = "side"
+                            viewModel.showInstructionsForSideScan()
+                        } else {
+                            // Both scans are complete, navigate to results page
+                            navigateToResults = true
+                        }
                     }
                 }
             )
         }
         .onChange(of: viewModel.scanComplete) { oldValue, newValue in
+            print("Scan complete changed: \(oldValue) -> \(newValue), perspective: \(currentScanPerspective)")
             if newValue && currentScanPerspective == "front" {
                 // Front scan complete, switch to side scan
+                print("Front scan complete, switching to side scan")
                 currentScanPerspective = "side"
                 viewModel.scanComplete = false
                 viewModel.showInstructionsForSideScan()
             } else if newValue && currentScanPerspective == "side" {
-                // Both scans complete, process the results
-                viewModel.processScans()
+                // Both scans complete, navigate to results
+                print("Side scan complete, navigating to results")
+                navigateToResults = true
             }
         }
         .onAppear {
@@ -115,6 +181,32 @@ struct BodyScanView: View {
             print("BodyScanView disappeared")
             viewModel.stopSession()
         }
+    }
+    
+    // Function to handle the countdown and capture
+    private func startCountdown() {
+        // Start countdown
+        isCountingDown = true
+        countdownValue = 5
+        
+        // Create a timer that fires every second
+        let timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { timer in
+            if self.countdownValue > 1 {
+                self.countdownValue -= 1
+            } else {
+                // When countdown reaches 0, stop the timer and take the photo
+                timer.invalidate()
+                self.isCountingDown = false
+                
+                // Add a small delay before capturing to allow UI to update
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    self.viewModel.captureImage()
+                }
+            }
+        }
+        
+        // Make sure the timer continues to fire even when scrolling
+        RunLoop.current.add(timer, forMode: .common)
     }
     
     private func resetForNewScan() {
@@ -154,8 +246,22 @@ struct StreamingCameraView: View {
     }
     
     private func handleCameraPreviews() async {
+        print("StreamingCameraView: Starting to handle camera previews")
+        var frameCount = 0
+        
         let imageStream = viewModel.depthCaptureManager.previewStream
             .compactMap { ciImage -> Image? in
+                // Count frames received from the stream
+                frameCount += 1
+                
+                if frameCount == 1 {
+                    print("StreamingCameraView: Received first image from preview stream")
+                }
+                
+                if frameCount % 30 == 0 {
+                    print("StreamingCameraView: Processed \(frameCount) frames")
+                }
+                
                 // Convert CIImage to SwiftUI Image with correct orientation
                 let ciContext = CIContext()
                 
@@ -168,16 +274,31 @@ struct StreamingCameraView: View {
                     rotatedImage = rotatedImage.transformed(by: CGAffineTransform(scaleX: -1, y: 1))
                 }
                 
-                guard let cgImage = ciContext.createCGImage(rotatedImage, from: rotatedImage.extent) else { return nil }
+                guard let cgImage = ciContext.createCGImage(rotatedImage, from: rotatedImage.extent) else {
+                    if frameCount < 10 { // Only log early failures to avoid spam
+                        print("StreamingCameraView: Failed to create CGImage from CIImage")
+                    }
+                    return nil
+                }
+                
                 return Image(decorative: cgImage, scale: 1, orientation: .up)
             }
+        
+        print("StreamingCameraView: Awaiting images from stream")
         
         for await image in imageStream {
             // Update the viewfinder image on the main thread
             await MainActor.run {
+                let oldImage = viewfinderImage
                 viewfinderImage = image
+                
+                if oldImage == nil && viewfinderImage != nil {
+                    print("StreamingCameraView: First viewfinder image set successfully")
+                }
             }
         }
+        
+        print("StreamingCameraView: Stream ended")
     }
 }
 
@@ -421,7 +542,8 @@ struct InstructionsView: View {
             
             VStack(spacing: 16) {
                 Text("Body Scan Instructions")
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .font(.tagesschrift(size: 22))
+                    .fontWeight(.bold)
                     .foregroundColor(.white)
                 
                 VStack(alignment: .leading, spacing: 12) {
@@ -438,7 +560,7 @@ struct InstructionsView: View {
                     }
                 }) {
                     Text("Got it")
-                        .font(.headline)
+                        .font(.tagesschrift(size: 16))
                         .foregroundColor(.white)
                         .padding(.vertical, 10)
                         .padding(.horizontal, 30)
@@ -486,13 +608,13 @@ struct InstructionRow: View {
                     .frame(width: 26, height: 26)
                 
                 Text("\(number)")
-                    .font(.subheadline)
+                    .font(.tagesschrift(size: 14))
                     .fontWeight(.bold)
                     .foregroundColor(.white)
             }
             
             Text(text)
-                .font(.subheadline)
+                .font(.tagesschrift(size: 14))
                 .foregroundColor(.white)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
@@ -509,19 +631,89 @@ class BodyScanViewModel: ObservableObject {
     
     @Published var isProcessing = false
     @Published var scanComplete = false
+    var fromChallenge: Bool = false
     @Published var showAlert = false
     @Published var alertTitle = ""
     @Published var alertMessage = ""
+    @Published var isCameraReady = false
     
-    private var frontImage: UIImage?
-    private var frontDepthData: CVPixelBuffer?
-    private var sideImage: UIImage?
-    private var sideDepthData: CVPixelBuffer?
+    // Changed from private to internal access level to allow ScanResultsView to access them
+    var frontImage: UIImage?
+    var frontDepthData: CVPixelBuffer?
+    var sideImage: UIImage?
+    var sideDepthData: CVPixelBuffer?
+    
+    // Store the body pose points for visualization
+    @Published var frontImageWithPosePoints: UIImage?
+    @Published var sideImageWithPosePoints: UIImage?
+    
+    // Body pose detection request
+    private let bodyPoseRequest = VNDetectHumanBodyPoseRequest()
     
     init() {
         print("Initializing BodyScanViewModel")
         depthCaptureManager = DepthCaptureManager()
         setupCaptureCallbacks()
+        setupSessionObservers()
+    }
+    
+    private func setupSessionObservers() {
+        print("Setting up session observers")
+        
+        // Monitor camera session state using notifications
+        let startNotificationName = AVCaptureSession.didStartRunningNotification
+        let stopNotificationName = AVCaptureSession.didStopRunningNotification
+        let runtimeErrorNotificationName = AVCaptureSession.runtimeErrorNotification
+        let wasInterruptedNotificationName = AVCaptureSession.wasInterruptedNotification
+        let interruptionEndedNotificationName = AVCaptureSession.interruptionEndedNotification
+        
+        // Session started notification
+        NotificationCenter.default.addObserver(forName: startNotificationName, object: depthCaptureManager.captureSession, queue: .main) { [weak self] notification in
+            guard let self = self else { return }
+            self.isCameraReady = true
+            print("📷 NOTIFICATION: Camera session did start running")
+            print("Camera ready state updated to: \(self.isCameraReady)")
+        }
+        
+        // Session stopped notification
+        NotificationCenter.default.addObserver(forName: stopNotificationName, object: depthCaptureManager.captureSession, queue: .main) { [weak self] _ in
+            guard let self = self else { return }
+            self.isCameraReady = false
+            print("📷 NOTIFICATION: Camera session did stop running")
+        }
+        
+        // Runtime error notification
+        NotificationCenter.default.addObserver(forName: runtimeErrorNotificationName, object: depthCaptureManager.captureSession, queue: .main) { [weak self] notification in
+            guard let self = self else { return }
+            print("📷 NOTIFICATION: Camera session runtime error")
+            
+            if let error = notification.userInfo?[AVCaptureSessionErrorKey] as? Error {
+                print("Camera error: \(error.localizedDescription)")
+                
+                // Show error to user
+                self.alertTitle = "Camera Error"
+                self.alertMessage = "The camera encountered an error: \(error.localizedDescription)"
+                self.showAlert = true
+            }
+        }
+        
+        // Session was interrupted notification
+        NotificationCenter.default.addObserver(forName: wasInterruptedNotificationName, object: depthCaptureManager.captureSession, queue: .main) { [weak self] notification in
+            guard let self = self else { return }
+            print("📷 NOTIFICATION: Camera session was interrupted")
+            
+            if let reason = notification.userInfo?[AVCaptureSessionInterruptionReasonKey] as? AVCaptureSession.InterruptionReason {
+                print("Interruption reason: \(reason.rawValue)")
+            }
+        }
+        
+        // Interruption ended notification
+        NotificationCenter.default.addObserver(forName: interruptionEndedNotificationName, object: depthCaptureManager.captureSession, queue: .main) { [weak self] _ in
+            guard let self = self else { return }
+            print("📷 NOTIFICATION: Camera session interruption ended")
+        }
+        
+        print("All session observers have been set up")
     }
     
     private func setupCaptureCallbacks() {
@@ -533,14 +725,19 @@ class BodyScanViewModel: ObservableObject {
                     // This is the front image
                     self.frontImage = image
                     self.frontDepthData = depthData
+                    // Process the image to detect body pose points
+                    self.detectBodyPosePoints(in: image, isFrontView: true)
                 } else {
                     // This is the side image
                     self.sideImage = image
                     self.sideDepthData = depthData
+                    // Process the image to detect body pose points
+                    self.detectBodyPosePoints(in: image, isFrontView: false)
                 }
                 
                 self.isProcessing = false
                 self.scanComplete = true
+                print("Photo captured and processed, scanComplete set to true, isFrontView: \(self.frontImage == nil ? false : true)")
             }
         }
         
@@ -549,8 +746,17 @@ class BodyScanViewModel: ObservableObject {
             
             DispatchQueue.main.async {
                 self.isProcessing = false
-                self.alertTitle = "Capture Error"
-                self.alertMessage = error.localizedDescription
+                
+                // Check if this is a camera permission error
+                let nsError = error as NSError
+                if nsError.domain == "DepthCaptureManager" && nsError.code == 2 {
+                    self.alertTitle = "Camera Permission Required"
+                    self.alertMessage = "Please allow camera access in Settings to use the body scan feature."
+                } else {
+                    self.alertTitle = "Capture Error"
+                    self.alertMessage = error.localizedDescription
+                }
+                
                 self.showAlert = true
             }
         }
@@ -558,7 +764,55 @@ class BodyScanViewModel: ObservableObject {
     
     func startSession() {
         print("ViewModel starting camera session")
+        
+        // Check if camera session is already running
+        if depthCaptureManager.captureSession.isRunning {
+            print("Camera session is already running before startSession() call")
+            self.isCameraReady = true
+        } else {
+            print("Camera session is not running, starting now...")
+        }
+        
+        // Start the camera session
         depthCaptureManager.startSession()
+        
+        // Check camera status after a short delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self = self else { return }
+            
+            // Check permission status
+            let permissionGranted = self.depthCaptureManager.cameraPermissionGranted
+            print("Camera permission status after 0.5s: \(permissionGranted)")
+            
+            // Check if session is running
+            let isRunning = self.depthCaptureManager.captureSession.isRunning
+            print("Camera session running status after 0.5s: \(isRunning)")
+            
+            // Update ready state
+            self.isCameraReady = permissionGranted && isRunning
+            print("Camera ready status updated to: \(self.isCameraReady)")
+            
+            if !self.isCameraReady {
+                if !permissionGranted {
+                    print("Camera not ready - permission denied")
+                } else if !isRunning {
+                    print("Camera not ready - session not running")
+                }
+            }
+        }
+        
+        // Check again after a longer delay to catch delayed startup
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            guard let self = self else { return }
+            
+            let isRunning = self.depthCaptureManager.captureSession.isRunning
+            print("Camera session running status after 2.0s: \(isRunning)")
+            
+            if isRunning && !self.isCameraReady {
+                print("Updating camera ready status - session is now running")
+                self.isCameraReady = true
+            }
+        }
     }
     
     func stopSession() {
@@ -571,48 +825,21 @@ class BodyScanViewModel: ObservableObject {
     }
     
     func showInstructionsForSideScan() {
+        print("Showing instructions for side scan")
         alertTitle = "Side Scan"
         alertMessage = "Great! Now please turn to your side and position yourself within the outline for a side view scan."
         showAlert = true
     }
     
+    // This function is now just for resetting scan data after processing
     func processScans() {
-        guard let frontImage = frontImage, let sideImage = sideImage else {
-            alertTitle = "Processing Error"
-            alertMessage = "Missing scan data. Please try again."
-            showAlert = true
-            return
-        }
-        
-        isProcessing = true
-        
-        // Here you would integrate with your AI model for body composition analysis
-        // For now, we'll simulate processing
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
-            guard let self = self else { return }
-            
-            // Simulate analysis results
-            let bodyFatPercentage = Double.random(in: 15...25)
-            let leanMusclePercentage = Double.random(in: 60...75)
-            let visceralFatLevel = ["Low", "Medium", "High"].randomElement()!
-            
-            // Save the scan log
-            ScanLogStore.shared.addScanLog(
-                bodyFatPercentage: bodyFatPercentage,
-                leanMusclePercentage: leanMusclePercentage,
-                visceralFatLevel: visceralFatLevel,
-                frontImage: frontImage,
-                sideImage: sideImage
-            )
-            
-            self.isProcessing = false
-            self.alertTitle = "Scan Complete"
-            self.alertMessage = "Body composition analysis complete!\n\nEstimated body fat: \(String(format: "%.1f%%", bodyFatPercentage))\nLean muscle mass: \(String(format: "%.1f%%", leanMusclePercentage))\nVisceral fat level: \(visceralFatLevel)"
-            self.showAlert = true
-        }
+        print("Processing scans and resetting state")
+        // Reset the scan data after processing
+        resetScanState()
     }
     
     func resetScanState() {
+        print("Resetting scan state")
         isProcessing = false
         scanComplete = false
         
@@ -621,11 +848,295 @@ class BodyScanViewModel: ObservableObject {
         frontDepthData = nil
         sideImage = nil
         sideDepthData = nil
+        frontImageWithPosePoints = nil
+        sideImageWithPosePoints = nil
+    }
+    
+    // MARK: - Body Pose Detection
+    
+    private func detectBodyPosePoints(in image: UIImage, isFrontView: Bool) {
+        // Convert UIImage to CIImage
+        guard let ciImage = CIImage(image: image) else { return }
+        
+        // Create a request handler with proper orientation
+        let requestHandler = VNImageRequestHandler(ciImage: ciImage, orientation: .right)
+        
+        do {
+            // Perform the body pose detection request
+            try requestHandler.perform([bodyPoseRequest])
+            
+            // Process the results
+            if let observations = bodyPoseRequest.results, !observations.isEmpty {
+                let bodyPose = observations[0] // Get the first detected body
+                
+                // Create an image with the pose points overlaid
+                let annotatedImage = drawPosePoints(on: image, bodyPose: bodyPose)
+                
+                // Store the annotated image
+                if isFrontView {
+                    self.frontImageWithPosePoints = annotatedImage
+                } else {
+                    self.sideImageWithPosePoints = annotatedImage
+                }
+            }
+        } catch {
+            print("Body pose detection failed: \(error.localizedDescription)")
+        }
+    }
+    
+    private func drawPosePoints(on image: UIImage, bodyPose: VNHumanBodyPoseObservation) -> UIImage {
+        // Start a graphics context with the original image
+        UIGraphicsBeginImageContextWithOptions(image.size, false, 0.0)
+        image.draw(at: .zero)
+        
+        // Get the graphics context
+        guard let context = UIGraphicsGetCurrentContext() else { return image }
+        
+        // Define the joints we want to visualize
+        let jointNames: [VNHumanBodyPoseObservation.JointName] = [
+            .nose, .leftEye, .rightEye, .leftEar, .rightEar,
+            .leftShoulder, .rightShoulder, .neck,
+            .leftElbow, .rightElbow, .leftWrist, .rightWrist,
+            .leftHip, .rightHip, .root,
+            .leftKnee, .rightKnee, .leftAnkle, .rightAnkle
+        ]
+        
+        // Set drawing parameters
+        context.setLineWidth(3.0)
+        context.setStrokeColor(UIColor.green.cgColor)
+        context.setFillColor(UIColor(red: 1.0, green: 0.2, blue: 0.2, alpha: 0.9).cgColor)
+        
+        // Draw each joint point
+        for jointName in jointNames {
+            if let point = try? bodyPose.recognizedPoint(jointName), point.confidence > 0.3 {
+                // Convert normalized point to image coordinates
+                let x = CGFloat(point.location.x) * image.size.width
+                let y = (1 - CGFloat(point.location.y)) * image.size.height  // Flip y-coordinate
+                
+                // Draw a larger circle at the joint position
+                context.fillEllipse(in: CGRect(x: x - 6, y: y - 6, width: 12, height: 12))
+                
+                // Add joint name as text with improved readability
+                // Get the simplified joint name
+                let jointText = formatJointName(jointName)
+                
+                // Use larger font for better readability
+                let attributes: [NSAttributedString.Key: Any] = [
+                    .font: UIFont.boldSystemFont(ofSize: 50),
+                    .foregroundColor: UIColor.white
+                ]
+                
+                let textSize = (jointText as NSString).size(withAttributes: attributes)
+                
+                // Position text with more space from the joint point
+                let textRect = CGRect(x: x + 10, y: y - textSize.height/2, width: textSize.width, height: textSize.height)
+                
+                // Draw a more visible background with rounded corners for the text
+                let backgroundPath = UIBezierPath(roundedRect: textRect.insetBy(dx: -6, dy: -4), cornerRadius: 6)
+                context.addPath(backgroundPath.cgPath)
+                context.setFillColor(UIColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 0.85).cgColor)
+                context.fillPath()
+                
+                // Add a subtle border around the text background
+                context.addPath(backgroundPath.cgPath)
+                context.setStrokeColor(UIColor.white.withAlphaComponent(0.3).cgColor)
+                context.setLineWidth(1.0)
+                context.strokePath()
+                
+                // Draw the text
+                context.setFillColor(UIColor.white.cgColor)
+                (jointText as NSString).draw(in: textRect, withAttributes: attributes)
+            }
+        }
+        
+        // Draw connections between joints to form a skeleton
+        drawSkeletonConnections(context: context, bodyPose: bodyPose, imageSize: image.size)
+        
+        // Get the resulting image
+        let resultImage = UIGraphicsGetImageFromCurrentImageContext()!
+        UIGraphicsEndImageContext()
+        
+        return resultImage
+    }
+    
+    // Helper function to format joint names for better readability
+    private func formatJointName(_ jointName: VNHumanBodyPoseObservation.JointName) -> String {
+        // Get just the simple name of the joint without any prefix
+        switch jointName {
+        case .nose: return "Nose"
+        case .leftEye: return "L Eye"
+        case .rightEye: return "R Eye"
+        case .leftEar: return "L Ear"
+        case .rightEar: return "R Ear"
+        case .neck: return "Neck"
+        case .leftShoulder: return "L Shoulder"
+        case .rightShoulder: return "R Shoulder"
+        case .leftElbow: return "L Elbow"
+        case .rightElbow: return "R Elbow"
+        case .leftWrist: return "L Wrist"
+        case .rightWrist: return "R Wrist"
+        case .leftHip: return "L Hip"
+        case .rightHip: return "R Hip"
+        case .root: return "Root"
+        case .leftKnee: return "L Knee"
+        case .rightKnee: return "R Knee"
+        case .leftAnkle: return "L Ankle"
+        case .rightAnkle: return "R Ankle"
+        default: return "Joint"
+        }
+    }
+    
+    private func drawSkeletonConnections(context: CGContext, bodyPose: VNHumanBodyPoseObservation, imageSize: CGSize) {
+        // Define connections between joints
+        let connections: [(VNHumanBodyPoseObservation.JointName, VNHumanBodyPoseObservation.JointName)] = [
+            (.nose, .leftEye), (.leftEye, .leftEar), (.nose, .rightEye), (.rightEye, .rightEar),
+            (.leftShoulder, .rightShoulder), (.leftShoulder, .leftElbow), (.leftElbow, .leftWrist),
+            (.rightShoulder, .rightElbow), (.rightElbow, .rightWrist),
+            (.leftShoulder, .leftHip), (.rightShoulder, .rightHip), (.leftHip, .rightHip),
+            (.leftHip, .leftKnee), (.leftKnee, .leftAnkle),
+            (.rightHip, .rightKnee), (.rightKnee, .rightAnkle)
+        ]
+        
+        // Set line properties with improved visibility
+        context.setStrokeColor(UIColor(red: 0.0, green: 0.8, blue: 1.0, alpha: 0.8).cgColor)
+        context.setLineWidth(3.0)
+        
+        // Draw each connection
+        for connection in connections {
+            guard let pointA = try? bodyPose.recognizedPoint(connection.0),
+                  let pointB = try? bodyPose.recognizedPoint(connection.1),
+                  pointA.confidence > 0.3,
+                  pointB.confidence > 0.3 else {
+                continue
+            }
+            
+            // Convert normalized points to image coordinates
+            let xA = CGFloat(pointA.location.x) * imageSize.width
+            let yA = (1 - CGFloat(pointA.location.y)) * imageSize.height
+            let xB = CGFloat(pointB.location.x) * imageSize.width
+            let yB = (1 - CGFloat(pointB.location.y)) * imageSize.height
+            
+            // Draw the line
+            context.move(to: CGPoint(x: xA, y: yA))
+            context.addLine(to: CGPoint(x: xB, y: yB))
+            context.strokePath()
+        }
+    }
+}
+
+// MARK: - Scan Results View
+
+struct ScanResultsView: View {
+    var frontImage: UIImage?
+    var sideImage: UIImage?
+    var fromChallenge: Bool = false
+    var dataStore: AppDataStore  // Accept data store as a parameter instead of environment object
+    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        ScrollView {
+            
+            VStack(spacing: 20) {
+                Text("Body Scan Results")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .padding(.top)
+                
+                Text("Body pose points detected")
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+                    .padding(.bottom, 10)
+                
+                VStack(spacing: 20) {
+                        // Front image with pose points
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Front View")
+                                .font(.headline)
+                            
+                            if let frontImage = frontImage {
+                                Image(uiImage: frontImage)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(maxWidth: .infinity)
+                                    .cornerRadius(12)
+                            } else {
+                                Text("Front image not available")
+                                    .foregroundColor(.gray)
+                            }
+                        }
+                        
+                        // Side image with pose points
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Side View")
+                                .font(.headline)
+                            
+                            if let sideImage = sideImage {
+                                Image(uiImage: sideImage)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(maxWidth: .infinity)
+                                    .cornerRadius(12)
+                            } else {
+                                Text("Side image not available")
+                                    .foregroundColor(.gray)
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+                
+                // Continue button
+                Button(action: {
+                    // Process the scan and add to feed
+                    processScanAndNavigateToFeed()
+                }) {
+                    Text("Continue")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(Color.blue)
+                        .cornerRadius(10)
+                }
+                .padding(.top, 20)
+                .padding(.horizontal)
+            }
+            .padding(.bottom, 40)
+        }
+        .navigationTitle("Body Scan Results")
+        .navigationBarItems(leading: Button("Retake") {
+            presentationMode.wrappedValue.dismiss()
+        })
+        .navigationBarBackButtonHidden(true)
+    }
+}
+
+// Add the processing function to ScanResultsView
+extension ScanResultsView {
+    func processScanAndNavigateToFeed() {
+        // Simulate analysis results
+        let bodyFatPercentage = Double.random(in: 15...25)
+        let leanMusclePercentage = Double.random(in: 60...75)
+        let visceralFatLevel = Int.random(in: 1...10)
+        
+        // Add the scan to the data store
+        dataStore.addScanLog(
+            bodyFatPercentage: bodyFatPercentage,
+            leanMusclePercentage: leanMusclePercentage,
+            visceralFatLevel: String(visceralFatLevel), // Convert Int to String
+            frontImage: frontImage,
+            sideImage: sideImage,
+            fromChallenge: fromChallenge
+        )
+        
+        // Dismiss all the way back to the root view (Today's Feed)
+        dismiss()
     }
 }
 
 struct BodyScanView_Previews: PreviewProvider {
     static var previews: some View {
         BodyScanView()
+            .environmentObject(AppDataStore.shared)
     }
 } 
