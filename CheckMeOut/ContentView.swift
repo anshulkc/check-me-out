@@ -125,27 +125,37 @@ class AppDataStore: ObservableObject {
     }
     
     func addThreadedPost(originalPost: FeedItem, responseText: String, responseImage: UIImage?) {
+        // This method is kept for backward compatibility but now uses addRoastToPost
+        addRoastToPost(originalPost: originalPost, responseText: responseText, responseImage: responseImage)
+    }
+    
+    func addRoastToPost(originalPost: FeedItem, responseText: String, responseImage: UIImage?) {
         let responseImageData = responseImage?.jpegData(compressionQuality: 0.7)
         
-        // Create a new threaded post - keep original likes and comments
-        let newItem = FeedItem(
+        // Create a new roast
+        let newRoast = Roast(
             username: "You",
             userAvatar: "person.circle.fill",
-            activityType: "thread",
             timestamp: Date(),
-            imageData: originalPost.imageData,
-            likes: originalPost.likes, // Use the original post's likes
-            comments: originalPost.comments, // Use the original post's comments
-            points: 100,
-            caption: originalPost.caption,
-            originalPostID: originalPost.id,
-            threadResponseText: responseText.isEmpty ? nil : responseText,
-            threadResponseImageData: responseImageData,
-            threadResponseLikes: 0 // Start with 0 likes for the response
+            text: responseText.isEmpty ? nil : responseText,
+            imageData: responseImageData
         )
         
-        // Add to the beginning of the feed
-        feedItems.insert(newItem, at: 0)
+        // Find the original post and update it with the new roast
+        if let index = feedItems.firstIndex(where: { $0.id == originalPost.id }) {
+            // Add the roast to the post
+            feedItems[index].roasts.append(newRoast)
+            
+            // Update the comments count
+            feedItems[index].comments += 1
+            
+            // Move the item to the top of the feed to show it's been updated
+            let updatedItem = feedItems.remove(at: index)
+            feedItems.insert(updatedItem, at: 0)
+            
+            // Notify listeners that the object has changed
+            objectWillChange.send()
+        }
     }
 }
 
@@ -388,48 +398,144 @@ struct FeedItemView: View {
                     .cornerRadius(12)
             }
             
-            // Thread response if this is a threaded post
-            if item.isThreaded {
+            // Show roasts attached to this post
+            if !item.roasts.isEmpty || item.isThreaded {
                 Divider()
                     .padding(.vertical, 4)
                 
-                HStack {
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.5))
-                        .frame(width: 2)
-                        .padding(.leading, 18)
-                    
-                    VStack(alignment: .leading, spacing: 8) {
-                        if let responseText = item.threadResponseText {
-                            Text(responseText)
-                                .font(.tagesschrift(size: 14))
-                                .padding(.leading, 8)
-                        }
+                // For backward compatibility, show threaded post if present
+                if item.isThreaded && item.threadResponseText != nil {
+                    HStack {
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.5))
+                            .frame(width: 2)
+                            .padding(.leading, 18)
                         
-                        if let responseImageData = item.threadResponseImageData, 
-                           let responseImage = UIImage(data: responseImageData) {
-                            Image(uiImage: responseImage)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(maxHeight: 200)
-                                .cornerRadius(8)
-                                .padding(.leading, 8)
-                        }
-                        
-                        // Thread response like button
-                        HStack {
-                            Spacer()
-                            
-                            Button(action: {
-                                AppDataStore.shared.toggleLike(for: item.id, isThreadResponse: true)
-                            }) {
-                                Label("\(item.threadResponseLikes)", systemImage: AppDataStore.shared.isPostLiked(item.id, isThreadResponse: true) ? "heart.fill" : "heart")
-                                    .font(.caption)
-                                    .foregroundColor(AppDataStore.shared.isPostLiked(item.id, isThreadResponse: true) ? .red : .black)
+                        VStack(alignment: .leading, spacing: 8) {
+                            if let responseText = item.threadResponseText {
+                                Text(responseText)
+                                    .font(.tagesschrift(size: 14))
+                                    .padding(.leading, 8)
                             }
-                            .padding(.trailing, 8)
-                            .padding(.top, 4)
+                            
+                            if let responseImageData = item.threadResponseImageData, 
+                               let responseImage = UIImage(data: responseImageData) {
+                                Image(uiImage: responseImage)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(maxHeight: 200)
+                                    .cornerRadius(8)
+                                    .padding(.leading, 8)
+                            }
+                            
+                            // Thread response like button
+                            HStack {
+                                Spacer()
+                                
+                                Button(action: {
+                                    AppDataStore.shared.toggleLike(for: item.id, isThreadResponse: true)
+                                }) {
+                                    Label("\(item.threadResponseLikes)", systemImage: AppDataStore.shared.isPostLiked(item.id, isThreadResponse: true) ? "heart.fill" : "heart")
+                                        .font(.caption)
+                                        .foregroundColor(AppDataStore.shared.isPostLiked(item.id, isThreadResponse: true) ? .red : .black)
+                                }
+                                .padding(.trailing, 8)
+                                .padding(.top, 4)
+                            }
                         }
+                    }
+                    
+                    if !item.roasts.isEmpty {
+                        Divider()
+                            .padding(.vertical, 4)
+                    }
+                }
+                
+                // Show all roasts
+                ForEach(item.roasts) { roast in
+                    HStack(spacing: 0) {
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.5))
+                            .frame(width: 2)
+                            .padding(.leading, 18)
+                        
+                        VStack(alignment: .leading, spacing: 8) {
+                            // Header with username and timestamp
+                            HStack {
+                                Image(systemName: roast.userAvatar)
+                                    .resizable()
+                                    .frame(width: 24, height: 24)
+                                    .foregroundColor(.gray)
+                                
+                                Text(roast.username)
+                                    .font(.tagesschrift(size: 13))
+                                    .fontWeight(.semibold)
+                                
+                                Spacer()
+                                
+                                Text(timeAgo(from: roast.timestamp))
+                                    .font(.tagesschrift(size: 11))
+                                    .foregroundColor(.gray)
+                            }
+                            .padding(.leading, 8)
+                            
+                            // Roast text if available
+                            if let text = roast.text {
+                                Text(text)
+                                    .font(.tagesschrift(size: 14))
+                                    .padding(.leading, 8)
+                            }
+                            
+                            // Roast image if available
+                            if let imageData = roast.imageData, 
+                               let image = UIImage(data: imageData) {
+                                Image(uiImage: image)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(maxHeight: 200)
+                                    .cornerRadius(8)
+                                    .padding(.leading, 8)
+                            }
+                            
+                            // Roast like button
+                            HStack {
+                                Spacer()
+                                
+                                Button(action: {
+                                    // For now, we'll just use the index in the array to identify the roast
+                                    if let index = item.roasts.firstIndex(where: { $0.id == roast.id }) {
+                                        let likeID = "\(item.id)-roast-\(index)"
+                                        if AppDataStore.shared.likedPosts.contains(likeID) {
+                                            // Unlike
+                                            AppDataStore.shared.likedPosts.remove(likeID)
+                                            if let postIndex = AppDataStore.shared.feedItems.firstIndex(where: { $0.id == item.id }) {
+                                                AppDataStore.shared.feedItems[postIndex].roasts[index].likes -= 1
+                                            }
+                                        } else {
+                                            // Like
+                                            AppDataStore.shared.likedPosts.insert(likeID)
+                                            if let postIndex = AppDataStore.shared.feedItems.firstIndex(where: { $0.id == item.id }) {
+                                                AppDataStore.shared.feedItems[postIndex].roasts[index].likes += 1
+                                            }
+                                        }
+                                        AppDataStore.shared.objectWillChange.send()
+                                    }
+                                }) {
+                                    let likeID = "\(item.id)-roast-\(item.roasts.firstIndex(where: { $0.id == roast.id }) ?? 0)"
+                                    Label("\(roast.likes)", systemImage: AppDataStore.shared.likedPosts.contains(likeID) ? "heart.fill" : "heart")
+                                        .font(.caption)
+                                        .foregroundColor(AppDataStore.shared.likedPosts.contains(likeID) ? .red : .black)
+                                }
+                                .padding(.trailing, 8)
+                                .padding(.top, 4)
+                            }
+                        }
+                    }
+                    
+                    if roast.id != item.roasts.last?.id {
+                        Divider()
+                            .padding(.vertical, 2)
+                            .padding(.leading, 28)
                     }
                 }
             }

@@ -257,8 +257,8 @@ struct FriendRoastView: View {
     func submitResponse() {
         guard let post = selectedPost else { return }
         
-        // Create thread post that references the original post
-        dataStore.addThreadedPost(
+        // Add roast directly to the original post instead of creating a new thread post
+        dataStore.addRoastToPost(
             originalPost: post,
             responseText: responseText,
             responseImage: customMemeImage

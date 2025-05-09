@@ -8,28 +8,51 @@
 import Foundation
 import SwiftUI
 
+// Define a model for roast/response attached to a post
+struct Roast: Identifiable {
+    let id = UUID()
+    let username: String
+    let userAvatar: String // system image name
+    let timestamp: Date
+    let text: String?
+    let imageData: Data?
+    var likes: Int
+    
+    init(username: String, userAvatar: String, timestamp: Date = Date(), text: String? = nil, imageData: Data? = nil, likes: Int = 0) {
+        self.username = username
+        self.userAvatar = userAvatar
+        self.timestamp = timestamp
+        self.text = text
+        self.imageData = imageData
+        self.likes = likes
+    }
+}
+
 // Define a model for our activity feed items
 struct FeedItem: Identifiable {
     let id = UUID()
     let username: String
     let userAvatar: String // system image name
-    let activityType: String // "meal", "workout", "bodycheck", "roast", "thread"
+    let activityType: String // "meal", "workout", "bodycheck"
     let timestamp: Date
     let imageData: Data?
     var likes: Int
-    let comments: Int
+    var comments: Int
     let points: Int
     let caption: String? // Optional caption for posts
     
-    // For threaded posts
+    // For storing roasts directly on the original post
+    var roasts: [Roast]
+    
+    // Keeping these for backward compatibility
     let isThreaded: Bool
     let originalPostID: UUID?
     let threadResponseText: String?
     let threadResponseImageData: Data?
-    var threadResponseLikes: Int // Separate likes for the response portion
+    var threadResponseLikes: Int
     
     // Default initializer for regular posts
-    init(username: String, userAvatar: String, activityType: String, timestamp: Date, imageData: Data?, likes: Int, comments: Int, points: Int, caption: String? = nil) {
+    init(username: String, userAvatar: String, activityType: String, timestamp: Date, imageData: Data?, likes: Int, comments: Int, points: Int, caption: String? = nil, roasts: [Roast] = []) {
         self.username = username
         self.userAvatar = userAvatar
         self.activityType = activityType
@@ -39,6 +62,7 @@ struct FeedItem: Identifiable {
         self.comments = comments
         self.points = points
         self.caption = caption
+        self.roasts = roasts
         self.isThreaded = false
         self.originalPostID = nil
         self.threadResponseText = nil
@@ -46,7 +70,7 @@ struct FeedItem: Identifiable {
         self.threadResponseLikes = 0
     }
     
-    // Initializer for threaded posts
+    // Initializer for threaded posts (for backward compatibility)
     init(username: String, userAvatar: String, activityType: String, timestamp: Date, imageData: Data?, likes: Int, comments: Int, points: Int, caption: String? = nil, originalPostID: UUID, threadResponseText: String?, threadResponseImageData: Data?, threadResponseLikes: Int = 0) {
         self.username = username
         self.userAvatar = userAvatar
@@ -57,6 +81,7 @@ struct FeedItem: Identifiable {
         self.comments = comments
         self.points = points
         self.caption = caption
+        self.roasts = []
         self.isThreaded = true
         self.originalPostID = originalPostID
         self.threadResponseText = threadResponseText
