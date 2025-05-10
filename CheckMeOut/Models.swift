@@ -8,6 +8,35 @@
 import Foundation
 import SwiftUI
 
+// MARK: - Supabase Models
+
+// Profile model for Supabase integration
+struct Profile: Codable {
+    let id: UUID
+    var username: String?
+    var fullName: String?
+    var avatarUrl: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case username
+        case fullName = "full_name"
+        case avatarUrl = "avatar_url"
+    }
+}
+
+struct UpdateProfileParams: Codable {
+    let username: String
+    let fullName: String
+    
+    enum CodingKeys: String, CodingKey {
+        case username
+        case fullName = "full_name"
+    }
+}
+
+// MARK: - App Models
+
 // Define a model for roast/response attached to a post
 struct Roast: Identifiable {
     let id = UUID()
