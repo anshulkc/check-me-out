@@ -17,12 +17,13 @@
 			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.331920877049-mgi27ftp6t0nfpq5e6549niorjet06j6</string>
+				<string>com.googleusercontent.apps.331920877049-n4hluktr5orpdc1thr1oie7u55n5aof9</string>
 			</array>
 		</dict>
 	</array>
 	<key>GIDClientID</key>
-	<string>331920877049-mgi27ftp6t0nfpq5e6549niorjet06j6.apps.googleusercontent.com</string>
+	<string>331920877049-n4hluktr5orpdc1thr1oie7u55n5aof9.apps.googleusercontent.com
+</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Tagesschrift-Regular.ttf</string>

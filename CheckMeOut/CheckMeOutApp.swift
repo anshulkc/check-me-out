@@ -7,11 +7,15 @@
 
 import SwiftUI
 import Supabase
+import GoogleSignIn
+import GoogleSignInSwift
+import UIKit
 
 // Authentication view model to handle auth state
 class AuthViewModel: ObservableObject {
     @Published var isAuthenticated = false
     @Published var currentUser: User? = nil
+
     
     init() {
         // Start listening for auth state changes
@@ -36,25 +40,98 @@ class AuthViewModel: ObservableObject {
     
     // Current user profile when authenticated
     @Published var userProfile: Profile? = nil
+
+    // Google sign-in - runs entirely on the main thread
+    @MainActor
+    func googleSignIn(presenting viewController: UIViewController) async throws {
+        // Configure Google Sign-In
+        let clientID = "331920877049-n4hluktr5orpdc1thr1oie7u55n5aof9.apps.googleusercontent.com"
+        GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: clientID)
+        
+        // Wrap the sign-in logic in MainActor to ensure it happens on the main thread
+        let result = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<GIDSignInResult, Error>) in
+            GIDSignIn.sharedInstance.signIn(withPresenting: viewController) { signInResult, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                
+                guard let signInResult = signInResult else {
+                    continuation.resume(throwing: NSError(domain: "GoogleSignIn", code: -1, userInfo: [NSLocalizedDescriptionKey: "No result returned"]))
+                    return
+                }
+                
+                continuation.resume(returning: signInResult)
+            }
+        }
+        
+        // Check for a valid ID token
+        guard let idToken = result.user.idToken?.tokenString else {
+            throw NSError(domain: "GoogleSignIn", code: -1, userInfo: [NSLocalizedDescriptionKey: "No ID token found"])
+        }
+        
+        let accessToken = result.user.accessToken.tokenString
+        
+        // Send tokens to Supabase
+        try await supabase.auth.signInWithIdToken(
+            credentials: .init(
+                provider: .google,
+                idToken: idToken,
+                accessToken: accessToken
+            )
+        )
+        
+        // Load user profile after successful sign-in
+        await loadUserProfile()
+    }
     
     // Load user profile from Supabase
     func loadUserProfile() async {
         guard let userId = currentUser?.id else { return }
+        guard let email = currentUser?.email else { return }
         
         do {
-            let profile: Profile = try await supabase
+            // Try to fetch the existing profile
+            let profiles: [Profile] = try await supabase
                 .from("profiles")
                 .select()
                 .eq("id", value: userId)
-                .single()
                 .execute()
                 .value
             
-            await MainActor.run {
-                self.userProfile = profile
+            // If profile exists, use it
+            if let profile = profiles.first {
+                await MainActor.run {
+                    self.userProfile = profile
+                }
+            } else {
+                // Create a new profile if none exists
+                print("Creating new profile for user: \(userId)")
+                
+                // Username defaults to email address initially
+                let username = email.components(separatedBy: "@").first ?? ""
+                
+                // Create a new profile
+                let newProfile = Profile(
+                    id: userId,
+                    username: username,
+                    fullName: nil,
+                    avatarUrl: nil
+                )
+                
+                // Insert the new profile
+                try await supabase
+                    .from("profiles")
+                    .insert(newProfile)
+                    .execute()
+                
+                // Set the profile
+                await MainActor.run {
+                    self.userProfile = newProfile
+                }
             }
         } catch {
-            print("Error fetching profile: \(error)")
+            print("Error with profile: \(error)")
         }
     }
     
@@ -116,10 +193,14 @@ class AuthViewModel: ObservableObject {
 @main
 struct CheckMeOutApp: App {
     @StateObject private var authViewModel = AuthViewModel()
+    
     var body: some Scene {
         WindowGroup {
             MainTabView()
                 .environmentObject(authViewModel)
+                .onOpenURL { url in
+                    GIDSignIn.sharedInstance.handle(url)
+                }
         }
     }
 }
@@ -185,6 +266,8 @@ struct SettingsView: View {
     @State private var showEditProfileSheet = false
     @State private var emailInput = ""
     @State private var passwordInput = ""
+    @State private var editProfileName = ""
+    @State private var editProfileUsername = ""
     
     // Auth view model
     @EnvironmentObject var authViewModel: AuthViewModel
@@ -194,67 +277,92 @@ struct SettingsView: View {
             Form {
                 // Account section
                 Section(header: Text("Account").font(.tagesschrift(size: 16)).foregroundColor(.primary)) {
-                    if authViewModel.isAuthenticated {
+                    if let user = authViewModel.currentUser {
+                        // Profile info section
                         HStack {
                             Image(systemName: "person.circle.fill")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 60, height: 60)
-                                .foregroundColor(.gray)
-                                .padding(.trailing, 10)
+                                .font(.system(size: 60))
+                                .foregroundColor(.blue)
                             
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(authViewModel.userProfile?.username ?? "User")
-                                    .font(.tagesschrift(size: 18))
-                                    .fontWeight(.medium)
-                                
-                                if let fullName = authViewModel.userProfile?.fullName, !fullName.isEmpty {
-                                    Text(fullName)
-                                        .font(.tagesschrift(size: 14))
+                            VStack(alignment: .leading) {
+                                if let profile = authViewModel.userProfile {
+                                    Text(profile.fullName ?? "No Name")
+                                        .font(.headline)
+                                    Text(profile.username ?? user.email ?? "")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                } else {
+                                    Text(user.email ?? "Signed In")
+                                        .font(.headline)
+                                    Text("Google Account")
+                                        .font(.subheadline)
                                         .foregroundColor(.secondary)
                                 }
                             }
-                            
                             Spacer()
-                            
-                            Button(action: {
-                                isLoading = true
-                                Task {
-                                    await authViewModel.signOut()
-                                    isLoading = false
-                                }
-                            }) {
-                                Text("Sign Out")
-                                    .foregroundColor(.red)
-                            }
-                            .disabled(isLoading)
                         }
                         .padding(.vertical, 8)
                         
-                        Button("Edit Profile") {
+                        // Account management buttons
+                        Button(action: {
+                            // Initialize form with current profile data
                             if let profile = authViewModel.userProfile {
-                                username = profile.username ?? ""
-                                fullName = profile.fullName ?? ""
+                                editProfileName = profile.fullName ?? ""
+                                editProfileUsername = profile.username ?? ""
+                            } else if let user = authViewModel.currentUser {
+                                // Default to email address as username if no profile exists
+                                editProfileUsername = user.email ?? ""
                             }
                             showEditProfileSheet = true
-                        }
-                    } else {
-                        Button(action: {
-                            showSignInSheet = true
                         }) {
                             HStack {
+                                Image(systemName: "person.badge.key.fill")
+                                    .foregroundColor(.blue)
+                                Text("Edit Profile")
                                 Spacer()
-                                Text("Sign In / Create Account")
+                                Image(systemName: "chevron.right")
+                                    .font(.footnote)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        
+                        Button(action: {
+                            Task {
+                                await authViewModel.signOut()
+                            }
+                        }) {
+                            HStack {
+                                Image(systemName: "rectangle.portrait.and.arrow.right")
+                                    .foregroundColor(.red)
+                                Text("Sign Out")
+                                    .foregroundColor(.red)
                                 Spacer()
                             }
                         }
-                    }
-                    
-                    if isLoading {
-                        HStack {
-                            Spacer()
-                            ProgressView()
-                            Spacer()
+                    } else {
+                        // Sign-in section when no user is logged in
+                        Button(action: {
+                            Task { @MainActor in
+                                do {
+                                    // Get the root view controller to present Google Sign-In
+                                    if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                                       let rootViewController = windowScene.windows.first?.rootViewController {
+                                        try await authViewModel.googleSignIn(presenting: rootViewController)
+                                    }
+                                } catch {
+                                    print("Error with Google Sign In: \(error)")
+                                }
+                            }
+                        }) {
+                            HStack {
+                                Image(systemName: "g.circle.fill")
+                                    .foregroundColor(.blue)
+                                Text("Sign in with Google")
+                            }
+                            .padding()
+                            .frame(maxWidth: .infinity)
+                            .background(Color(.systemGray6))
+                            .cornerRadius(8)
                         }
                     }
                 }
@@ -374,12 +482,13 @@ struct SettingsView: View {
             .sheet(isPresented: $showEditProfileSheet) {
                 NavigationStack {
                     Form {
-                        Section(header: Text("Edit Profile")) {
-                            TextField("Username", text: $username)
-                                .autocapitalization(.none)
-                                .disableAutocorrection(true)
+                        Section(header: Text("Profile Information")) {
+                            TextField("Full Name", text: $editProfileName)
+                                .autocapitalization(.words)
                             
-                            TextField("Full Name", text: $fullName)
+                            TextField("Username", text: $editProfileUsername)
+                                .autocapitalization(.none)
+                                .keyboardType(.emailAddress)
                                 .textContentType(.name)
                         }
                     }
@@ -410,7 +519,7 @@ struct SettingsView: View {
         isLoading = true
         
         Task {
-            await authViewModel.updateProfile(username: username, fullName: fullName)
+            await authViewModel.updateProfile(username: editProfileUsername, fullName: editProfileName)
             
             await MainActor.run {
                 isLoading = false
