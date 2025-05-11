@@ -699,7 +699,7 @@ class BodyScanViewModel: ObservableObject {
         
         // Session was interrupted notification
         NotificationCenter.default.addObserver(forName: wasInterruptedNotificationName, object: depthCaptureManager.captureSession, queue: .main) { [weak self] notification in
-            guard let self = self else { return }
+            guard self != nil else { return }
             print("📷 NOTIFICATION: Camera session was interrupted")
             
             if let reason = notification.userInfo?[AVCaptureSessionInterruptionReasonKey] as? AVCaptureSession.InterruptionReason {
@@ -709,7 +709,7 @@ class BodyScanViewModel: ObservableObject {
         
         // Interruption ended notification
         NotificationCenter.default.addObserver(forName: interruptionEndedNotificationName, object: depthCaptureManager.captureSession, queue: .main) { [weak self] _ in
-            guard let self = self else { return }
+            guard self != nil else { return }
             print("📷 NOTIFICATION: Camera session interruption ended")
         }
         

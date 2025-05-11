@@ -11,185 +11,6 @@ import GoogleSignIn
 import GoogleSignInSwift
 import UIKit
 
-// Authentication view model to handle auth state
-class AuthViewModel: ObservableObject {
-    @Published var isAuthenticated = false
-    @Published var currentUser: User? = nil
-
-    
-    init() {
-        // Start listening for auth state changes
-        Task {
-            for await state in supabase.auth.authStateChanges {
-                if [.initialSession, .signedIn, .signedOut].contains(state.event) {
-                    await MainActor.run {
-                        self.isAuthenticated = state.session != nil
-                        self.currentUser = state.session?.user
-                        
-                        // If signed in, try to load profile
-                        if state.session != nil {
-                            Task {
-                                await loadUserProfile()
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    // Current user profile when authenticated
-    @Published var userProfile: Profile? = nil
-
-    // Google sign-in - runs entirely on the main thread
-    @MainActor
-    func googleSignIn(presenting viewController: UIViewController) async throws {
-        // Configure Google Sign-In
-        let clientID = "331920877049-n4hluktr5orpdc1thr1oie7u55n5aof9.apps.googleusercontent.com"
-        GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: clientID)
-        
-        // Wrap the sign-in logic in MainActor to ensure it happens on the main thread
-        let result = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<GIDSignInResult, Error>) in
-            GIDSignIn.sharedInstance.signIn(withPresenting: viewController) { signInResult, error in
-                if let error = error {
-                    continuation.resume(throwing: error)
-                    return
-                }
-                
-                guard let signInResult = signInResult else {
-                    continuation.resume(throwing: NSError(domain: "GoogleSignIn", code: -1, userInfo: [NSLocalizedDescriptionKey: "No result returned"]))
-                    return
-                }
-                
-                continuation.resume(returning: signInResult)
-            }
-        }
-        
-        // Check for a valid ID token
-        guard let idToken = result.user.idToken?.tokenString else {
-            throw NSError(domain: "GoogleSignIn", code: -1, userInfo: [NSLocalizedDescriptionKey: "No ID token found"])
-        }
-        
-        let accessToken = result.user.accessToken.tokenString
-        
-        // Send tokens to Supabase
-        try await supabase.auth.signInWithIdToken(
-            credentials: .init(
-                provider: .google,
-                idToken: idToken,
-                accessToken: accessToken
-            )
-        )
-        
-        // Load user profile after successful sign-in
-        await loadUserProfile()
-    }
-    
-    // Load user profile from Supabase
-    func loadUserProfile() async {
-        guard let userId = currentUser?.id else { return }
-        guard let email = currentUser?.email else { return }
-        
-        do {
-            // Try to fetch the existing profile
-            let profiles: [Profile] = try await supabase
-                .from("profiles")
-                .select()
-                .eq("id", value: userId)
-                .execute()
-                .value
-            
-            // If profile exists, use it
-            if let profile = profiles.first {
-                await MainActor.run {
-                    self.userProfile = profile
-                }
-            } else {
-                // Create a new profile if none exists
-                print("Creating new profile for user: \(userId)")
-                
-                // Username defaults to email address initially
-                let username = email.components(separatedBy: "@").first ?? ""
-                
-                // Create a new profile
-                let newProfile = Profile(
-                    id: userId,
-                    username: username,
-                    fullName: nil,
-                    avatarUrl: nil
-                )
-                
-                // Insert the new profile
-                try await supabase
-                    .from("profiles")
-                    .insert(newProfile)
-                    .execute()
-                
-                // Set the profile
-                await MainActor.run {
-                    self.userProfile = newProfile
-                }
-            }
-        } catch {
-            print("Error with profile: \(error)")
-        }
-    }
-    
-    // Update user profile
-    func updateProfile(username: String, fullName: String) async {
-        guard let userId = currentUser?.id else { return }
-        
-        do {
-            try await supabase
-                .from("profiles")
-                .update(
-                    UpdateProfileParams(
-                        username: username,
-                        fullName: fullName
-                    )
-                )
-                .eq("id", value: userId)
-                .execute()
-            
-            // Reload profile after update
-            await loadUserProfile()
-        } catch {
-            print("Error updating profile: \(error)")
-        }
-    }
-    
-    // Sign in with email and password
-    func signIn(email: String, password: String) async -> Bool {
-        do {
-            _ = try await supabase.auth.signIn(email: email, password: password)
-            return true
-        } catch {
-            print("Error signing in: \(error)")
-            return false
-        }
-    }
-    
-    // Sign up with email and password
-    func signUp(email: String, password: String) async -> Bool {
-        do {
-            _ = try await supabase.auth.signUp(email: email, password: password)
-            return true
-        } catch {
-            print("Error signing up: \(error)")
-            return false
-        }
-    }
-    
-    // Sign out current user
-    func signOut() async {
-        do {
-            try await supabase.auth.signOut()
-        } catch {
-            print("Error signing out: \(error)")
-        }
-    }
-}
-
 @main
 struct CheckMeOutApp: App {
     @StateObject private var authViewModel = AuthViewModel()
@@ -253,8 +74,8 @@ struct MainTabView: View {
 
 struct SettingsView: View {
     // Personal measurements
-    @AppStorage("userHeight") private var userHeight = 170.0 // cm
-    @AppStorage("userWeight") private var userWeight = 70.0 // kg
+    @AppStorage("userHeight") private var userHeight: Double = 60 // in
+    @AppStorage("userWeight") private var userWeight: Double = 150 // lbs
     @AppStorage("userAge") private var userAge = 30
     @AppStorage("userGender") private var userGender = "Male"
     
@@ -357,54 +178,64 @@ struct SettingsView: View {
                             HStack {
                                 Image(systemName: "g.circle.fill")
                                     .foregroundColor(.blue)
-                                Text("Sign in with Google")
+                                Text("Sign in with Google").font(.tagesschrift(size: 16))
                             }
-                            .padding()
+                            .padding(8)
                             .frame(maxWidth: .infinity)
-                            .background(Color(.systemGray6))
                             .cornerRadius(8)
                         }
                     }
                 }
                 
                 Section(header: Text("Personal Information").font(.tagesschrift(size: 16)).foregroundColor(.primary)) {
-                    Picker(selection: $userGender, label: Text("Gender")) {
-                        Text("Male").tag("Male")
-                        Text("Female").tag("Female")
-                        Text("Other").tag("Other")
+                    Picker(selection: $userGender, label: Text("Gender").font(.tagesschrift(size: 16))) {
+                        Text("Male").font(.tagesschrift(size: 16)).tag("Male")
+                        Text("Female").font(.tagesschrift(size: 16)).tag("Female")
+                        Text("Other").font(.tagesschrift(size: 16)).tag("Other")
                     }
                     
-                    HStack {
-                        Text("Age")
-                        Spacer()
-                        Stepper("\(userAge) years", value: $userAge, in: 18...100)
+                    VStack(alignment: .leading) {
+                        Text("Age: \(userAge) yrs")
+                            .font(.tagesschrift(size: 16))
+                        Picker("", selection: $userAge) {
+                            ForEach(Array(stride(from: 13, through: 100, by: 1)), id: \.self) { h in
+                                Text("\(h) yrs").font(.tagesschrift(size: 14))
+                                    .tag(h)
+                            }
+                        }
+                        .pickerStyle(.wheel)
+                        .frame(height: 120)    // tighten up the wheel
+                        .clipped()
                     }
                     
-                    HStack {
-                        Text("Height")
-                        Spacer()
-                        Stepper(String(format: "%.1f cm", userHeight), value: $userHeight, in: 100...220, step: 0.5)
+                    VStack(alignment: .leading) {
+                        Text("Height: \(userHeight, specifier: "%.1f") in")
+                            .font(.tagesschrift(size: 16))
+                        Picker("", selection: $userHeight) {
+                            ForEach(Array(stride(from: 24.0, through: 100.0, by: 0.5)), id: \.self) { h in
+                                Text("\(h, specifier: "%.1f") in").font(.tagesschrift(size: 14))
+                                    .tag(h)
+                            }
+                        }
+                        .pickerStyle(.wheel)
+                        .frame(height: 120)    // tighten up the wheel
+                        .clipped()
                     }
-                    
-                    HStack {
-                        Text("Weight")
-                        Spacer()
-                        Stepper(String(format: "%.1f kg", userWeight), value: $userWeight, in: 30...200, step: 0.5)
-                    }
-                }
-                
-                Section(header: Text("Scan Settings").font(.tagesschrift(size: 16)).foregroundColor(.primary)) {
-                    Toggle("High Resolution Scan", isOn: .constant(true))
-                    Toggle("Save Scan History", isOn: .constant(true))
-                    Toggle("Show Detailed Results", isOn: .constant(true))
-                }
-                
-                Section(header: Text("Privacy").font(.tagesschrift(size: 16)).foregroundColor(.primary)) {
-                    Toggle("Encrypt Scan Data", isOn: .constant(true))
-                    Button("Delete All Scan Data") {
-                        // Add confirmation dialog and deletion logic
-                    }
-                    .foregroundColor(.red)
+
+    VStack(alignment: .leading) {
+                       Text("Weight: \(userWeight, specifier: "%.1f") lbs")
+                        .font(.tagesschrift(size: 16))
+                       Picker("", selection: $userWeight) {
+                           ForEach(Array(stride(from: 30.0, through: 500.0, by: 0.5)), id: \.self) { w in
+                               Text("\(w, specifier: "%.1f") lbs")
+                                   .font(.tagesschrift(size: 14))
+                                   .tag(w)
+                           }
+                       }
+                       .pickerStyle(.wheel)
+                       .frame(height: 120)
+                       .clipped()
+                   }
                 }
                 
                 Section(header: Text("About").font(.tagesschrift(size: 16)).foregroundColor(.primary)) {
@@ -415,17 +246,16 @@ struct SettingsView: View {
                             .foregroundColor(.gray)
                     }
                     
-                    Button("Privacy Policy") {
-                        // Open privacy policy
-                        Text("No privacy, I will still all of your data (im evil)").font(.tagesschrift(size: 16))
-
+                    NavigationLink("Privacy Policy") {
+                        PrivacyPolicyView()   // swap in a PrivacyPolicyView if you make one
                     }
+                    .font(.tagesschrift(size: 16))
+
+                    NavigationLink("Terms of Service") {
+                        TermsOfServiceView()
+                    }
+                    .font(.tagesschrift(size: 16))
                     
-                    Button("Terms of Service") {
-                        // Open terms of service
-                        Text("Just workout, eat healthy, and roast your friends. Anything else is irrelevant.").font(.tagesschrift(size: 16))
-
-                    }
                 }
             }
             .navigationTitle("Settings")
@@ -510,6 +340,32 @@ struct SettingsView: View {
                     }
                 }
             }
+        }
+    }
+    
+    struct TermsOfServiceView: View {
+        var body: some View {
+            ScrollView {
+                Text("""
+                Just workout, eat healthy, and roast your friends. Anything else is irrelevant.
+                """)
+                .padding()
+            }
+            .navigationTitle("Terms of Service")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+    
+    struct PrivacyPolicyView: View {
+        var body: some View {
+            ScrollView {
+                Text("""
+                No privacy, I will still all of your data (im evil)
+                """)
+                .padding()
+            }
+            .navigationTitle("Privacy Policy")
+            .navigationBarTitleDisplayMode(.inline)
         }
     }
     
