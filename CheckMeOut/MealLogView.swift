@@ -10,7 +10,7 @@ import UIKit
 
 struct MealLogView: View {
     @Environment(\.presentationMode) var presentationMode
-    @ObservedObject private var dataStore = AppDataStore.shared
+    @ObservedObject private var dataStore = SupabaseDataStore.shared
     @State private var inputImage: UIImage?
     @State private var mealCaption = ""
     @State private var showingCamera = false

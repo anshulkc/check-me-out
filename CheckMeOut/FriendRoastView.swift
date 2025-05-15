@@ -11,7 +11,7 @@ import UIKit
 struct FriendRoastView: View {
     @Environment(\.presentationMode) var presentationMode
     @Environment(\.dismiss) private var dismiss
-    @ObservedObject private var dataStore = AppDataStore.shared
+    @ObservedObject private var dataStore = SupabaseDataStore.shared
     @State private var selectedPost: FeedItem? = nil
     @State private var responseText = ""
     @State private var showingMemeOptions = false
@@ -387,11 +387,11 @@ struct SelectableFeedItemView: View {
                     // Points and stats
                     HStack(spacing: 16) {
                         Button(action: {
-                            AppDataStore.shared.toggleLike(for: post.id)
+                            SupabaseDataStore.shared.toggleLike(for: post.id)
                         }) {
-                            Label("\(post.likes)", systemImage: AppDataStore.shared.isPostLiked(post.id) ? "heart.fill" : "heart")
+                            Label("\(post.likes)", systemImage: SupabaseDataStore.shared.isPostLiked(post.id) ? "heart.fill" : "heart")
                                 .font(.caption)
-                                .foregroundColor(AppDataStore.shared.isPostLiked(post.id) ? .red : .secondary)
+                                .foregroundColor(SupabaseDataStore.shared.isPostLiked(post.id) ? .red : .secondary)
                         }
                         
                         Spacer()

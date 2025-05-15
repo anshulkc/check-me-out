@@ -16,12 +16,19 @@ struct Profile: Codable {
     var username: String?
     var fullName: String?
     var avatarUrl: String?
+    var totalPoints: Int?
+    var gender: String?
+    var age: Int?
+    var height: Int?
+    var weight: Int?
+    var bodyFatPercentage: Double?
     
     enum CodingKeys: String, CodingKey {
-        case id
-        case username
+        case id = "id"
+        case username = "username"
         case fullName = "full_name"
         case avatarUrl = "avatar_url"
+        case totalPoints = "total_points"
     }
 }
 
@@ -30,7 +37,7 @@ struct UpdateProfileParams: Codable {
     let fullName: String
     
     enum CodingKeys: String, CodingKey {
-        case username
+        case username = "username"
         case fullName = "full_name"
     }
 }
@@ -54,6 +61,29 @@ struct Roast: Identifiable {
         self.text = text
         self.imageData = imageData
         self.likes = likes
+    }
+}
+
+// Supabase roast model
+struct SupabaseRoast: Codable, Identifiable {
+    let id: UUID
+    let userId: UUID
+    let feedItemId: UUID
+    let username: String?
+    let createdAt: Date
+    let text: String?
+    let imageUrl: String?
+    var likes: Int
+    
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case userId = "user_id"
+        case feedItemId = "feed_item_id"
+        case username = "username"
+        case createdAt = "created_at"
+        case text = "text"
+        case imageUrl = "image_url"
+        case likes = "likes"
     }
 }
 
@@ -88,7 +118,7 @@ struct FeedItem: Identifiable {
         self.timestamp = timestamp
         self.imageData = imageData
         self.likes = likes
-        self.comments = comments
+        self.comments = comments // number of comments on the post, not the comments themselves
         self.points = points
         self.caption = caption
         self.roasts = roasts
@@ -119,15 +149,79 @@ struct FeedItem: Identifiable {
     }
 }
 
+// Supabase feed item model
+struct SupabaseFeedItem: Codable, Identifiable {
+    let id: UUID
+    let userId: UUID
+    let username: String
+    let userAvatarUrl: String?
+    let activityType: String
+    let timestamp: Date
+    let imageUrl: String?
+    var likes: Int
+    var comments: Int
+    let points: Int
+    let caption: String?
+    var roasts: [SupabaseRoast]?
+    
+    enum CodingKeys: String, CodingKey {
+        case id = "id"
+        case userId = "user_id"
+        case username = "username"
+        case userAvatarUrl = "user_avatar_url"
+        case activityType = "activity_type"
+        case timestamp = "timestamp"
+        case imageUrl = "image_url"
+        case likes = "likes"
+        case comments = "comments"
+        case points = "points"
+        case caption = "caption"
+        case roasts = "roasts"
+    }
+}
+
 // Define a model for our scan logs
+
+
+struct Like: Codable {
+    let id: UUID
+    let userId: UUID
+    let feedItemId: UUID
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case feedItemId = "feed_item_id"
+    }
+}
+
+// For tracking completed challenges
+struct CompletedChallenge: Codable {
+    let id: UUID
+    let userId: UUID
+    let challengeTitle: String
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case challengeTitle = "challenge_title"
+    }
+}
+
 struct ScanLog: Identifiable, Hashable {
-    let id = UUID()
+    let id: UUID
     let timestamp: Date
     let bodyFatPercentage: Double
-    let leanMusclePercentage: Double
-    let visceralFatLevel: String
     let frontImageData: Data?
     let sideImageData: Data?
+    
+    init(id: UUID = UUID(), timestamp: Date = Date(), bodyFatPercentage: Double, frontImageData: Data? = nil, sideImageData: Data? = nil) {
+        self.id = id
+        self.timestamp = timestamp
+        self.bodyFatPercentage = bodyFatPercentage
+        self.frontImageData = frontImageData
+        self.sideImageData = sideImageData
+    }
     
     // Implement Hashable conformance
     func hash(into hasher: inout Hasher) {
@@ -139,3 +233,22 @@ struct ScanLog: Identifiable, Hashable {
         return lhs.id == rhs.id
     }
 } 
+
+// Supabase scan log model
+struct SupabaseScanLog: Codable, Identifiable {
+    let id: UUID
+    let userId: UUID
+    let timestamp: Date
+    let bodyFatPercentage: Double
+    let frontImageUrl: String?
+    let sideImageUrl: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case timestamp = "timestamp"
+        case bodyFatPercentage = "body_fat_percentage"
+        case frontImageUrl = "front_image_url"
+        case sideImageUrl = "side_image_url"
+    }
+}

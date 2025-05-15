@@ -1,0 +1,36 @@
+<coding>
+Always prefer simple solutions
+Avoid duplication of code whenever possible
+Write code that considers dev, test, and prod environments
+Make only necessary changes that are well understood or requested
+Avoid introducing new patterns unless all existing ones are exhausted
+Remove outdated implementations when replacing patterns
+Keep the codebase very clean and organized
+Avoid writing scripts that are intended to run only once
+Refactor files that grow beyond 200–300 lines
+Mock data only for tests—not for dev or prod environments
+Do not add stub or fake data patterns affecting dev or prod
+SwiftUI UI Design Rules:
+
+Use Built-in Components: Utilize SwiftUI's native UI elements like List, NavigationView, TabView, and SF Symbols for a polished, iOS-consistent look.
+
+Master Layout Tools: Employ VStack, HStack, ZStack, Spacer, Padding for responsive designs; use LazyVGrid and LazyHGrid for grids; GeometryReader for dynamic layouts.
+
+Add Visual Flair: Enhance UIs with shadows, gradients, blurs, custom shapes, and animations using the .animation() modifier for smooth transitions.
+
+Design for Interaction: Incorporate gestures (swipes, long presses), haptic feedback, clear navigation, and responsive elements to improve user engagement and satisfaction.
+</coding>
+
+<filesystem>
+Never overwrite the .env file without asking and confirming
+</filesystem>
+
+<project>
+Development framework is SwiftUI
+Use Core Data for persistence
+Build system is Xcode
+Testing framework is XCTest
+UI testing framework is XCUITest
+Use MVVM as the app architecture
+Support depth capture via DepthCaptureManager
+</project>

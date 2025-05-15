@@ -14,11 +14,17 @@ import UIKit
 @main
 struct CheckMeOutApp: App {
     @StateObject private var authViewModel = AuthViewModel()
+    @StateObject private var dataStore = SupabaseDataStore.shared
+    
+    init() {
+        // Initialize any app-wide settings here
+    }
     
     var body: some Scene {
         WindowGroup {
             MainTabView()
                 .environmentObject(authViewModel)
+                .environmentObject(dataStore)
                 .onOpenURL { url in
                     GIDSignIn.sharedInstance.handle(url)
                 }

@@ -10,7 +10,7 @@ import UIKit
 
 struct WorkoutLogView: View {
     @Environment(\.presentationMode) var presentationMode
-    @ObservedObject private var dataStore = AppDataStore.shared
+    @ObservedObject private var dataStore = SupabaseDataStore.shared
     @State private var inputImage: UIImage?
     @State private var workoutCaption = ""
     @State private var showingCamera = false

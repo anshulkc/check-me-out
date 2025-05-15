@@ -18,7 +18,7 @@ struct Challenge: Identifiable {
 }
 
 struct ChallengesView: View {
-    @ObservedObject private var dataStore = AppDataStore.shared
+    @ObservedObject private var dataStore = SupabaseDataStore.shared
     @State private var showingBodyScanView = false
     @State private var showingMealLogView = false
     @State private var showingWorkoutLogView = false

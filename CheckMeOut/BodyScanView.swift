@@ -17,7 +17,7 @@ struct BodyScanView: View {
     @State private var navigateToResults = false
     @State private var isCountingDown = false
     @State private var countdownValue = 5
-    @EnvironmentObject var dataStore: AppDataStore
+    @EnvironmentObject var dataStore: SupabaseDataStore
     var fromChallenge: Bool = false
     
     init(fromChallenge: Bool = false) {
@@ -132,7 +132,7 @@ struct BodyScanView: View {
                 frontImage: viewModel.frontImageWithPosePoints ?? viewModel.frontImage,
                 sideImage: viewModel.sideImageWithPosePoints ?? viewModel.sideImage,
                 fromChallenge: fromChallenge,
-                dataStore: AppDataStore.shared  // Pass the data store directly as a parameter
+                dataStore: SupabaseDataStore.shared  // Pass the data store directly as a parameter
             )
         }
         .alert(isPresented: $viewModel.showAlert) {
@@ -1030,7 +1030,7 @@ struct ScanResultsView: View {
     var frontImage: UIImage?
     var sideImage: UIImage?
     var fromChallenge: Bool = false
-    var dataStore: AppDataStore  // Accept data store as a parameter instead of environment object
+    var dataStore: SupabaseDataStore  // Accept data store as a parameter instead of environment object
     @Environment(\.presentationMode) var presentationMode
     @Environment(\.dismiss) private var dismiss
     
@@ -1115,15 +1115,11 @@ struct ScanResultsView: View {
 extension ScanResultsView {
     func processScanAndNavigateToFeed() {
         // Simulate analysis results
-        let bodyFatPercentage = Double.random(in: 15...25)
-        let leanMusclePercentage = Double.random(in: 60...75)
-        let visceralFatLevel = Int.random(in: 1...10)
+        let bodyFatPercentage = Double.random(in: 15...25) // TODO: replace with actual analysis using claude api
         
         // Add the scan to the data store
         dataStore.addScanLog(
             bodyFatPercentage: bodyFatPercentage,
-            leanMusclePercentage: leanMusclePercentage,
-            visceralFatLevel: String(visceralFatLevel), // Convert Int to String
             frontImage: frontImage,
             sideImage: sideImage,
             fromChallenge: fromChallenge

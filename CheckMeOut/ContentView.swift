@@ -8,159 +8,8 @@
 import SwiftUI
 import CoreData
 
-// Create a shared data model to store scan logs and feed
-class AppDataStore: ObservableObject {
-    @Published var scanLogs: [ScanLog] = []
-    @Published var feedItems: [FeedItem] = []
-    @Published var totalPoints: Int = 1250
-    @Published var completedChallenges: Set<String> = []
-    @Published var likedPosts: Set<String> = []
-    
-    static let shared = AppDataStore()
-    
-    init() {
-        // Add some sample feed items
-        if feedItems.isEmpty {
-            addSampleFeedItems()
-        }
-    }
-    
-    func addScanLog(bodyFatPercentage: Double, leanMusclePercentage: Double, 
-                   visceralFatLevel: String, frontImage: UIImage?, sideImage: UIImage?, 
-                   fromChallenge: Bool = false) {
-        let frontImageData = frontImage?.jpegData(compressionQuality: 0.7)
-        let sideImageData = sideImage?.jpegData(compressionQuality: 0.7)
-        
-        let newLog = ScanLog(
-            timestamp: Date(),
-            bodyFatPercentage: bodyFatPercentage,
-            leanMusclePercentage: leanMusclePercentage,
-            visceralFatLevel: visceralFatLevel,
-            frontImageData: frontImageData,
-            sideImageData: sideImageData
-        )
-        
-        scanLogs.append(newLog)
-        
-        // Points to award
-        let points = fromChallenge ? 100 : 75
-        
-        // Also add to feed
-        addFeedItem(username: "You", userAvatar: "person.circle.fill", activityType: "bodycheck", imageData: frontImageData, points: points)
-        
-        // Add points
-        totalPoints += points
-        
-        // If this was from a challenge, mark it as completed
-        if fromChallenge {
-            completeChallenge("Post a scan of yourself")
-        }
-    }
-    
-    func addFeedItem(username: String, userAvatar: String, activityType: String, imageData: Data?, points: Int, caption: String? = nil, fromChallenge: Bool = false) {
-        let newItem = FeedItem(
-            username: username,
-            userAvatar: userAvatar,
-            activityType: activityType,
-            timestamp: Date(),
-            imageData: imageData,
-            likes: 0,
-            comments: 0,
-            points: points,
-            caption: caption
-        )
-        
-        feedItems.insert(newItem, at: 0)
-    }
-    
-    // Method to like or unlike a post
-    func toggleLike(for postID: UUID, isThreadResponse: Bool = false) {
-        // Find the post
-        if let index = feedItems.firstIndex(where: { $0.id == postID }) {
-            let likeID = isThreadResponse ? "\(postID)-response" : postID.uuidString
-            
-            // Check if post/response is already liked
-            if likedPosts.contains(likeID) {
-                // Unlike the post
-                if isThreadResponse {
-                    feedItems[index].threadResponseLikes -= 1
-                } else {
-                    feedItems[index].likes -= 1
-                }
-                likedPosts.remove(likeID) // Remove like
-            } else {
-                // Like the post
-                if isThreadResponse {
-                    feedItems[index].threadResponseLikes += 1
-                } else {
-                    feedItems[index].likes += 1
-                }
-                likedPosts.insert(likeID) // Mark post as liked
-            }
-            objectWillChange.send()
-        }
-    }
-    
-    // Check if a post or thread response is liked
-    func isPostLiked(_ postID: UUID, isThreadResponse: Bool = false) -> Bool {
-        let likeID = isThreadResponse ? "\(postID)-response" : postID.uuidString
-        return likedPosts.contains(likeID)
-    }
-    
-    private func addSampleFeedItems() {
-        // Add sample feed items similar to the image
-        addFeedItem(username: "John D.", userAvatar: "person.circle.fill", activityType: "meal", imageData: nil, points: 50)
-        addFeedItem(username: "Sarah M.", userAvatar: "person.circle.fill", activityType: "workout", imageData: nil, points: 100)
-    }
-    
-    // Method to mark a challenge as completed
-    func completeChallenge(_ challengeTitle: String) {
-        completedChallenges.insert(challengeTitle)
-        objectWillChange.send()
-    }
-    
-    // Method to check if a challenge is completed
-    func isChallengeCompleted(_ challengeTitle: String) -> Bool {
-        return completedChallenges.contains(challengeTitle)
-    }
-    
-    func addThreadedPost(originalPost: FeedItem, responseText: String, responseImage: UIImage?) {
-        // This method is kept for backward compatibility but now uses addRoastToPost
-        addRoastToPost(originalPost: originalPost, responseText: responseText, responseImage: responseImage)
-    }
-    
-    func addRoastToPost(originalPost: FeedItem, responseText: String, responseImage: UIImage?) {
-        let responseImageData = responseImage?.jpegData(compressionQuality: 0.7)
-        
-        // Create a new roast
-        let newRoast = Roast(
-            username: "You",
-            userAvatar: "person.circle.fill",
-            timestamp: Date(),
-            text: responseText.isEmpty ? nil : responseText,
-            imageData: responseImageData
-        )
-        
-        // Find the original post and update it with the new roast
-        if let index = feedItems.firstIndex(where: { $0.id == originalPost.id }) {
-            // Add the roast to the post
-            feedItems[index].roasts.append(newRoast)
-            
-            // Update the comments count
-            feedItems[index].comments += 1
-            
-            // Move the item to the top of the feed to show it's been updated
-            let updatedItem = feedItems.remove(at: index)
-            feedItems.insert(updatedItem, at: 0)
-            
-            // Notify listeners that the object has changed
-            objectWillChange.send()
-        }
-    }
-}
-
 struct ContentView: View {
-    @ObservedObject private var dataStore = AppDataStore.shared
+    @ObservedObject private var dataStore = SupabaseDataStore.shared
     @State private var navigationPath = NavigationPath()
 
     var body: some View {
@@ -208,6 +57,8 @@ struct ContentView: View {
                             } label: {
                                 QuickActionButtonContent(icon: "dumbbell", title: "Log\nWorkout")
                             }
+
+                            // making the grass green
                             
                             Button {
                                 navigationPath.append("bodyScan")
@@ -433,11 +284,11 @@ struct FeedItemView: View {
                                 Spacer()
                                 
                                 Button(action: {
-                                    AppDataStore.shared.toggleLike(for: item.id, isThreadResponse: true)
+                                    SupabaseDataStore.shared.toggleLike(for: item.id, isThreadResponse: true)
                                 }) {
-                                    Label("\(item.threadResponseLikes)", systemImage: AppDataStore.shared.isPostLiked(item.id, isThreadResponse: true) ? "heart.fill" : "heart")
+                                    Label("\(item.threadResponseLikes)", systemImage: SupabaseDataStore.shared.isPostLiked(item.id, isThreadResponse: true) ? "heart.fill" : "heart")
                                         .font(.caption)
-                                        .foregroundColor(AppDataStore.shared.isPostLiked(item.id, isThreadResponse: true) ? .red : .black)
+                                        .foregroundColor(SupabaseDataStore.shared.isPostLiked(item.id, isThreadResponse: true) ? .red : .black)
                                 }
                                 .padding(.trailing, 8)
                                 .padding(.top, 4)
@@ -505,26 +356,26 @@ struct FeedItemView: View {
                                     // For now, we'll just use the index in the array to identify the roast
                                     if let index = item.roasts.firstIndex(where: { $0.id == roast.id }) {
                                         let likeID = "\(item.id)-roast-\(index)"
-                                        if AppDataStore.shared.likedPosts.contains(likeID) {
+                                        if SupabaseDataStore.shared.likedPosts.contains(likeID) {
                                             // Unlike
-                                            AppDataStore.shared.likedPosts.remove(likeID)
-                                            if let postIndex = AppDataStore.shared.feedItems.firstIndex(where: { $0.id == item.id }) {
-                                                AppDataStore.shared.feedItems[postIndex].roasts[index].likes -= 1
+                                            SupabaseDataStore.shared.likedPosts.remove(likeID)
+                                            if let postIndex = SupabaseDataStore.shared.feedItems.firstIndex(where: { $0.id == item.id }) {
+                                                SupabaseDataStore.shared.feedItems[postIndex].roasts[index].likes -= 1
                                             }
                                         } else {
                                             // Like
-                                            AppDataStore.shared.likedPosts.insert(likeID)
-                                            if let postIndex = AppDataStore.shared.feedItems.firstIndex(where: { $0.id == item.id }) {
-                                                AppDataStore.shared.feedItems[postIndex].roasts[index].likes += 1
+                                            SupabaseDataStore.shared.likedPosts.insert(likeID)
+                                            if let postIndex = SupabaseDataStore.shared.feedItems.firstIndex(where: { $0.id == item.id }) {
+                                                SupabaseDataStore.shared.feedItems[postIndex].roasts[index].likes += 1
                                             }
                                         }
-                                        AppDataStore.shared.objectWillChange.send()
+                                        SupabaseDataStore.shared.objectWillChange.send()
                                     }
                                 }) {
                                     let likeID = "\(item.id)-roast-\(item.roasts.firstIndex(where: { $0.id == roast.id }) ?? 0)"
-                                    Label("\(roast.likes)", systemImage: AppDataStore.shared.likedPosts.contains(likeID) ? "heart.fill" : "heart")
+                                    Label("\(roast.likes)", systemImage: SupabaseDataStore.shared.likedPosts.contains(likeID) ? "heart.fill" : "heart")
                                         .font(.caption)
-                                        .foregroundColor(AppDataStore.shared.likedPosts.contains(likeID) ? .red : .black)
+                                        .foregroundColor(SupabaseDataStore.shared.likedPosts.contains(likeID) ? .red : .black)
                                 }
                                 .padding(.trailing, 8)
                                 .padding(.top, 4)
@@ -557,11 +408,11 @@ struct FeedItemView: View {
                 Spacer()
                 
                 Button(action: {
-                    AppDataStore.shared.toggleLike(for: item.id)
+                    SupabaseDataStore.shared.toggleLike(for: item.id)
                 }) {
-                    Label("\(item.likes)", systemImage: AppDataStore.shared.isPostLiked(item.id) ? "heart.fill" : "heart")
+                    Label("\(item.likes)", systemImage: SupabaseDataStore.shared.isPostLiked(item.id) ? "heart.fill" : "heart")
                         .font(.caption)
-                        .foregroundColor(AppDataStore.shared.isPostLiked(item.id) ? .red : .black)
+                        .foregroundColor(SupabaseDataStore.shared.isPostLiked(item.id) ? .red : .black)
                 }
             }
         }
@@ -637,10 +488,6 @@ struct ScanLogRow: View {
                 Text("Body Fat: \(String(format: "%.1f%%", log.bodyFatPercentage))")
                     .font(.tagesschriftSubheadline)
                     .foregroundColor(.secondary)
-                
-                Text("Muscle Mass: \(String(format: "%.1f%%", log.leanMusclePercentage))")
-                    .font(.tagesschriftSubheadline)
-                    .foregroundColor(.secondary)
             }
             
             Spacer()
@@ -677,8 +524,6 @@ struct ScanDetailView: View {
                 
                 Group {
                     ResultRow(title: "Body Fat", value: String(format: "%.1f%%", log.bodyFatPercentage))
-                    ResultRow(title: "Lean Muscle", value: String(format: "%.1f%%", log.leanMusclePercentage))
-                    ResultRow(title: "Visceral Fat", value: log.visceralFatLevel)
                     ResultRow(title: "Scan Date", value: log.timestamp.formatted(date: .long, time: .shortened))
                 }
                 
