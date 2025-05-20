@@ -6,32 +6,52 @@ extension Font {
         return Font.custom("Tagesschrift-Regular", size: size)
     }
     
+    static func bricolage(size: CGFloat) -> Font {
+        return Font.custom("BricolageGrotesque_24pt-Regular", size: size)
+    }
+    
+    static func poetsen(size: CGFloat) -> Font {
+        return Font.custom("PoetsenOne-Regular", size: size)
+    }
+    
+    static func lexend(size: CGFloat) -> Font {
+        return Font.custom("Lexend-VariableFont_wght", size: size)
+    }
+    
+    static func lato(size: CGFloat) -> Font {
+        return Font.custom("Lato-Regular", size: size)
+    }
+    
+    static func quicksand(size: CGFloat) -> Font {
+        return Font.custom("Quicksand-Regular", size: size)
+    }
+
     // Common text styles
     static var tagesschriftTitle: Font {
-        return tagesschrift(size: 24)
+        return quicksand(size: 24)
     }
     
     static var tagesschriftTitle2: Font {
-        return tagesschrift(size: 22)
+        return quicksand(size: 22)
     }
     
     static var tagesschriftTitle3: Font {
-        return tagesschrift(size: 20)
+        return quicksand(size: 20)
     }
     
     static var tagesschriftHeadline: Font {
-        return tagesschrift(size: 18)
+        return quicksand(size: 18)
     }
     
     static var tagesschriftSubheadline: Font {
-        return tagesschrift(size: 16)
+        return poetsen(size: 16)
     }
     
     static var tagesschriftBody: Font {
-        return tagesschrift(size: 14)
+        return poetsen(size: 14)
     }
     
     static var tagesschriftCaption: Font {
-        return tagesschrift(size: 12)
+        return poetsen(size: 12)
     }
 }

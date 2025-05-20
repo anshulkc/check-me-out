@@ -256,9 +256,11 @@ struct FriendRoastView: View {
     
     func submitResponse() {
         guard let post = selectedPost else { return }
+
+        Task {
         
         // Add roast directly to the original post instead of creating a new thread post
-        dataStore.addRoastToPost(
+        await dataStore.addRoastToPost(
             originalPost: post,
             responseText: responseText,
             responseImage: customMemeImage
@@ -268,17 +270,17 @@ struct FriendRoastView: View {
         let points = fromChallenge ? 100 : 50
         
         // Add points to user
-        dataStore.totalPoints += points
+        await dataStore.totalPoints += points
         
         // If this is from a challenge, mark it as completed
         if fromChallenge {
             // Complete the challenge
-            dataStore.completeChallenge("Respond to a friend's post")
+            await dataStore.completeChallenge("Respond to a friend's post")
             
             // Add a feed item showing the friend received your response
             let friendName = post.username
             
-            dataStore.addFeedItem(
+            await dataStore.addFeedItem(
                 username: friendName,
                 userAvatar: "person.circle.fill",
                 activityType: "received_response",
@@ -289,7 +291,10 @@ struct FriendRoastView: View {
             )
         }      
         // Show confirmation
-        showingAlert = true
+        await MainActor.run {
+            showingAlert = true
+        }
+    }
     }
     
     static func activityTypeText(_ type: String) -> String {

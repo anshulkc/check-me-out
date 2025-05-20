@@ -210,53 +210,51 @@ extension SupabaseDataStore {
                 sideImageUrl = await uploadImage(image: sideImage, path: "scan_logs/\(UUID().uuidString)-side.jpg")
             }
             
-            // Create the scan log data for Supabase
-            let scanLogData: [String: any Encodable] = [
-                "user_id": userId,
-                "timestamp": Date(),
-                "body_fat_percentage": bodyFatPercentage,
-                "front_image_url": frontImageUrl,
-                "side_image_url": sideImageUrl
-            ]
+            let newScanLogId = UUID()
+            let supabaseScanLogPayload = SupabaseScanLog(
+                id: newScanLogId,
+                userId: userId,
+                timestamp: Date(),
+                bodyFatPercentage: bodyFatPercentage,
+                frontImageUrl: frontImageUrl,
+                sideImageUrl: sideImageUrl
+            )
             
             // Insert into Supabase
-            let response = try await supabase
+            try await supabase
                 .from("scan_logs")
-                .insert(scanLogData)
-                .select()
+                .insert(supabaseScanLogPayload)
                 .execute()
                 
-            // Get the created scan log with its ID
-            if let createdLog = try response.decoded(as: [SupabaseScanLog].self).first {
-                // Create local model with the same ID
-                let newLog = ScanLog(
-                    id: createdLog.id,
-                    timestamp: createdLog.timestamp,
-                    bodyFatPercentage: createdLog.bodyFatPercentage,
-                    frontImageData: frontImage?.jpegData(compressionQuality: 0.7),
-                    sideImageData: sideImage?.jpegData(compressionQuality: 0.7)
-                )
-                
-                // Update local data
-                await MainActor.run {
-                    self.scanLogs.insert(newLog, at: 0)
-                }
-                
-                // Also add to feed
-                await addFeedItem(
-                    activityType: "bodycheck",
-                    imageData: frontImage?.jpegData(compressionQuality: 0.7),
-                    points: fromChallenge ? 100 : 75,
-                    imageUrl: frontImageUrl
-                )
-                
-                // Update points
-                await updateUserPoints(points: fromChallenge ? 100 : 75)
-                
-                // If from challenge, mark it as completed
-                if fromChallenge {
-                    await completeChallenge("Post a scan of yourself")
-                }
+            // If insert was successful, proceed to update local model and UI
+            // Use details from supabaseScanLogPayload as it contains the client-generated ID and timestamp
+            let newLog = ScanLog(
+                id: supabaseScanLogPayload.id, // Use ID from payload
+                timestamp: supabaseScanLogPayload.timestamp, // Use timestamp from payload
+                bodyFatPercentage: supabaseScanLogPayload.bodyFatPercentage,
+                frontImageData: frontImage?.jpegData(compressionQuality: 0.7),
+                sideImageData: sideImage?.jpegData(compressionQuality: 0.7)
+            )
+            
+            // Update local data
+            await MainActor.run {
+                self.scanLogs.insert(newLog, at: 0)
+            }
+            
+            // Also add to feed
+            await addFeedItem(
+                activityType: "bodycheck",
+                imageData: frontImage?.jpegData(compressionQuality: 0.7),
+                points: fromChallenge ? 100 : 75,
+                imageUrl: frontImageUrl
+            )
+            
+            // Update points
+            await updateUserPoints(points: fromChallenge ? 100 : 75)
+            
+            // If from challenge, mark it as completed
+            if fromChallenge {
+                await completeChallenge("Post a scan of yourself")
             }
         } catch {
             print("Error adding scan log: \(error)")
@@ -269,25 +267,17 @@ extension SupabaseDataStore {
         }
         
         do {
-            let file = File(
-                name: URL(string: path)!.lastPathComponent,
-                data: imageData,
-                fileName: path,
-                contentType: "image/jpeg"
-            )
-            
-            let response = try await supabase.storage
+            _ = try await supabase.storage
                 .from("images")
-                .upload(
-                    path: path,
-                    file: file,
+                .upload(path, data: imageData, // Corrected deprecated method
                     options: FileOptions(
                         cacheControl: "3600",
                         upsert: true
                     )
                 )
             
-            return supabase.storage.from("images").getPublicURL(path: path)
+            // Return public URL as String, ensure 'try' is present
+            return try supabase.storage.from("images").getPublicURL(path: path).absoluteString
         } catch {
             print("Error uploading image: \(error)")
             return nil
@@ -331,6 +321,8 @@ extension SupabaseDataStore {
                 }
                 
                 return FeedItem(
+                    id: item.id,
+                    userId: item.userId,
                     username: item.username,
                     userAvatar: "person.circle.fill", // Default avatar
                     activityType: item.activityType,
@@ -364,53 +356,54 @@ extension SupabaseDataStore {
                 finalImageUrl = await uploadImage(image: image, path: "feed/\(UUID().uuidString).jpg")
             }
             
-            // Create the feed item data for Supabase
-            let feedItemData: [String: Any] = [
-                "user_id": userId,
-                "username": profile.username ?? "User",
-                "user_avatar_url": profile.avatarUrl ?? "",
-                "activity_type": activityType,
-                "timestamp": Date(),
-                "image_url": finalImageUrl,
-                "likes": 0,
-                "comments": 0,
-                "points": points,
-                "caption": caption
-            ]
+            let newFeedItemId = UUID()
+            let supabaseFeedItemPayload = SupabaseFeedItem(
+                id: newFeedItemId,
+                userId: userId,
+                username: profile.username ?? "User",
+                userAvatarUrl: profile.avatarUrl,
+                activityType: activityType,
+                timestamp: Date(),
+                imageUrl: finalImageUrl,
+                likes: 0,
+                comments: 0,
+                points: points,
+                caption: caption,
+                roasts: nil // Roasts are handled separately
+            )
             
             // Insert into Supabase
-            let response = try await supabase
+            try await supabase
                 .from("feed_items")
-                .insert(feedItemData)
-                .select()
+                .insert(supabaseFeedItemPayload)
                 .execute()
                 
-            // Get the created feed item with its ID
-            if let createdItem = try response.decoded(as: [SupabaseFeedItem].self).first {
-                // Create local model with the same ID
-                let newItem = FeedItem(
-                    username: profile.username ?? "User",
-                    userAvatar: "person.circle.fill",
-                    activityType: activityType,
-                    timestamp: Date(),
-                    imageData: imageData,
-                    likes: 0,
-                    comments: 0,
-                    points: points,
-                    caption: caption
-                )
-                
-                await MainActor.run {
-                    self.feedItems.insert(newItem, at: 0)
-                }
-                
-                // Update points
-                await updateUserPoints(points: points)
-                
-                // If from challenge, mark it as completed
-                if fromChallenge {
-                    await completeChallenge("Post a \(activityType)")
-                }
+            // If insert was successful, proceed to update local model and UI
+            // Use details from supabaseFeedItemPayload
+            let newItem = FeedItem(
+                id: newFeedItemId,
+                userId: userId,
+                username: supabaseFeedItemPayload.username,
+                userAvatar: "person.circle.fill", // Default or fetch from profile if needed
+                activityType: supabaseFeedItemPayload.activityType,
+                timestamp: supabaseFeedItemPayload.timestamp, // Use timestamp from payload
+                imageData: imageData, // imageData is already prepared
+                likes: 0, // Initial likes
+                comments: 0, // Initial comments
+                points: supabaseFeedItemPayload.points,
+                caption: supabaseFeedItemPayload.caption
+            )
+            
+            await MainActor.run {
+                self.feedItems.insert(newItem, at: 0)
+            }
+            
+            // Update points
+            await updateUserPoints(points: points)
+            
+            // If from challenge, mark it as completed
+            if fromChallenge {
+                await completeChallenge("Post a \(activityType)")
             }
         } catch {
             print("Error adding feed item: \(error)")
@@ -435,14 +428,14 @@ extension SupabaseDataStore {
         
         do {
             // Find the post in Supabase
-            let feedItems: [SupabaseFeedItem] = try await supabase
+            let feedItemsResponse: [SupabaseFeedItem] = try await supabase // Renamed to avoid conflict
                 .from("feed_items")
                 .select()
                 .eq("id", value: originalPost.id.uuidString)
                 .execute()
                 .value
                 
-            guard let feedItemId = feedItems.first?.id else {
+            guard let feedItemId = feedItemsResponse.first?.id else { // Use renamed variable
                 print("Feed item not found in Supabase")
                 return
             }
@@ -453,53 +446,53 @@ extension SupabaseDataStore {
                 imageUrl = await uploadImage(image: responseImage, path: "roasts/\(UUID().uuidString).jpg")
             }
             
-            // Create the roast data for Supabase
-            let roastData: [String: Any] = [
-                "user_id": userId,
-                "feed_item_id": feedItemId,
-                "username": profile.username ?? "User",
-                "text": responseText.isEmpty ? nil : responseText,
-                "image_url": imageUrl,
-                "likes": 0
-            ]
+            let newRoastId = UUID()
+            let supabaseRoastPayload = SupabaseRoast(
+                id: newRoastId,
+                userId: userId,
+                feedItemId: feedItemId,
+                username: profile.username ?? "User",
+                createdAt: Date(),
+                text: responseText.isEmpty ? nil : responseText,
+                imageUrl: imageUrl,
+                likes: 0
+            )
             
             // Insert into Supabase
-            let response = try await supabase
+            try await supabase
                 .from("roasts")
-                .insert(roastData)
-                .select()
+                .insert(supabaseRoastPayload)
                 .execute()
-                
-            // Get the created roast with its ID
-            if let createdRoast = try response.decoded(as: [SupabaseRoast].self).first {
-                // Increment comments count on the feed item
-                try await supabase.rpc("increment_comments", params: ["item_id": feedItemId]).execute()
-                
-                // Convert image to data for local storage
-                let responseImageData = responseImage?.jpegData(compressionQuality: 0.7)
-                
-                // Create local roast model
-                let newRoast = Roast(
-                    username: profile.username ?? "User",
-                    userAvatar: "person.circle.fill",
-                    timestamp: createdRoast.createdAt,
-                    text: responseText.isEmpty ? nil : responseText,
-                    imageData: responseImageData
-                )
-                
-                // Update local data
-                await MainActor.run {
-                    if let index = self.feedItems.firstIndex(where: { $0.id == originalPost.id }) {
-                        // Add the roast to the post
-                        self.feedItems[index].roasts.append(newRoast)
-                        
-                        // Update the comments count
-                        self.feedItems[index].comments += 1
-                        
-                        // Move the item to the top of the feed
-                        let updatedItem = self.feedItems.remove(at: index)
-                        self.feedItems.insert(updatedItem, at: 0)
-                    }
+            
+            // If insert was successful, proceed to update local model and UI
+            // Increment comments count on the feed item (server-side)
+            try await supabase.rpc("increment_comments", params: ["item_id": feedItemId]).execute()
+            
+            // Convert image to data for local storage
+            let responseImageData = responseImage?.jpegData(compressionQuality: 0.7)
+            
+            // Create local roast model using info from supabaseRoastPayload
+            let newRoast = Roast(
+                username: supabaseRoastPayload.username ?? "User",
+                userAvatar: "person.circle.fill", // Default avatar
+                timestamp: supabaseRoastPayload.createdAt, // Use timestamp from payload
+                text: supabaseRoastPayload.text,
+                imageData: responseImageData,
+                likes: 0 // Initial likes
+            )
+            
+            // Update local data
+            await MainActor.run {
+                if let index = self.feedItems.firstIndex(where: { $0.id == originalPost.id }) {
+                    // Add the roast to the post
+                    self.feedItems[index].roasts.append(newRoast)
+                    
+                    // Update the comments count
+                    self.feedItems[index].comments += 1
+                    
+                    // Move the item to the top of the feed
+                    let updatedItem = self.feedItems.remove(at: index)
+                    self.feedItems.insert(updatedItem, at: 0)
                 }
             }
         } catch {
@@ -535,23 +528,24 @@ extension SupabaseDataStore {
         guard let userId = authViewModel.currentUser?.id else { return }
         
         do {
-            // Find the post in Supabase
-            let feedItems: [FeedItem] = try await supabase
+            // Find the post in Supabase to confirm existence and get its current server state if needed
+            let supabaseFeedItems: [SupabaseFeedItem] = try await supabase
                 .from("feed_items")
                 .select()
                 .eq("id", value: postID.uuidString)
                 .execute()
                 .value
                 
-            guard let feedItemId = feedItems.first?.id else {
-                print("Feed item not found in Supabase")
+            guard let supabaseFeedItem = supabaseFeedItems.first else {
+                print("Feed item not found in Supabase for toggling like")
                 return
             }
+            let feedItemId = supabaseFeedItem.id // Use the ID from the fetched Supabase item
             
             let postIdString = postID.uuidString
-            let isLiked = likedPosts.contains(postIdString)
+            let isLikedLocally = likedPosts.contains(postIdString)
             
-            if isLiked {
+            if isLikedLocally {
                 // Unlike the post
                 try await supabase
                     .from("likes")
@@ -560,32 +554,30 @@ extension SupabaseDataStore {
                     .eq("feed_item_id", value: feedItemId)
                     .execute()
                     
-                // Decrement likes count
-                try await supabase.rpc("decrement_likes", params: ["item_id": feedItemId]).execute()
+                // Decrement likes count on server
+                _ = try await supabase.rpc("decrement_likes", params: ["item_id": feedItemId]).execute()
                 
-                await MainActor.run {
+                _ = await MainActor.run {
                     likedPosts.remove(postIdString)
-                    if let index = feedItems.firstIndex(where: { $0.id == postID }) {
-                        feedItems[index].likes -= 1
+                    if let index = self.feedItems.firstIndex(where: { $0.id == postID }) {
+                        self.feedItems[index].likes -= 1
                     }
                 }
             } else {
                 // Like the post
+                let likePayload = LikeInsertPayload(userId: userId, feedItemId: feedItemId)
                 try await supabase
                     .from("likes")
-                    .insert([
-                        "user_id": userId,
-                        "feed_item_id": feedItemId
-                    ])
+                    .insert(likePayload)
                     .execute()
                     
-                // Increment likes count
-                try await supabase.rpc("increment_likes", params: ["item_id": feedItemId]).execute()
+                // Increment likes count on server
+                _ = try await supabase.rpc("increment_likes", params: ["item_id": feedItemId]).execute()
                 
-                await MainActor.run {
+                _ = await MainActor.run {
                     likedPosts.insert(postIdString)
-                    if let index = feedItems.firstIndex(where: { $0.id == postID }) {
-                        feedItems[index].likes += 1
+                    if let index = self.feedItems.firstIndex(where: { $0.id == postID }) {
+                        self.feedItems[index].likes += 1
                     }
                 }
             }
@@ -633,13 +625,11 @@ extension SupabaseDataStore {
             }
             
             // Mark as completed in Supabase
+            let payload = CompletedChallengeInsertPayload(userId: userId, challengeTitle: challengeTitle)
             try await supabase
                 .from("completed_challenges")
-                .insert([
-                    "user_id": userId,
-                    "challenge_title": challengeTitle
-                ])
-                .execute()
+                .insert(payload)
+                .execute() // No try needed if PostgrestResponse<Void> and not checking result for error
                 
             await MainActor.run {
                 completedChallenges.insert(challengeTitle)
@@ -759,6 +749,119 @@ extension SupabaseDataStore {
                 sideImage: sideImage,
                 fromChallenge: fromChallenge
             )
+        }
+    }
+
+    func deleteFeedItem(feedItemToDelete: FeedItem) async {
+        guard let currentUserId = authViewModel.currentUser?.id else {
+            print("Error: User not authenticated. Cannot delete feed item.")
+            return
+        }
+
+        let feedItemId = feedItemToDelete.id
+
+        do {
+            // 1. Fetch the SupabaseFeedItem to get its details and verify ownership
+            let fetchedSupabaseFeedItems: [SupabaseFeedItem] = try await supabase
+                .from("feed_items")
+                .select()
+                .eq("id", value: feedItemId)
+                .limit(1) // Expecting only one item
+                .execute()
+                .value
+
+            guard let supabaseFeedItem = fetchedSupabaseFeedItems.first else {
+                print("Error: Feed item with ID \(feedItemId) not found in Supabase. Cannot delete.")
+                return
+            }
+
+            // 2. Authorization Check: Ensure the current user owns the post
+            guard supabaseFeedItem.userId == currentUserId else {
+                print("Error: User \(currentUserId) is not authorized to delete feed item \(feedItemId) owned by \(supabaseFeedItem.userId).")
+                // Potentially show an alert to the user or handle this more gracefully
+                return
+            }
+
+            // 3. Delete Associated Roasts and their Images
+            let roastsToDelete: [SupabaseRoast] = try await supabase
+                .from("roasts")
+                .select()
+                .eq("feed_item_id", value: feedItemId)
+                .execute()
+                .value
+
+            for roast in roastsToDelete {
+                if let roastImageUrl = roast.imageUrl {
+                    await deleteImageFromStorage(publicUrl: roastImageUrl, bucketName: "images")
+                }
+            }
+            if !roastsToDelete.isEmpty {
+                try await supabase
+                    .from("roasts")
+                    .delete()
+                    .eq("feed_item_id", value: feedItemId)
+                    .execute()
+            }
+
+            // 4. Delete Main Feed Item Image from Storage
+            if let feedItemImageUrl = supabaseFeedItem.imageUrl {
+                await deleteImageFromStorage(publicUrl: feedItemImageUrl, bucketName: "images")
+            }
+
+            // 5. Delete Associated Likes
+            try await supabase
+                .from("likes")
+                .delete()
+                .eq("feed_item_id", value: feedItemId)
+                .execute()
+
+            // 6. Delete the Feed Item Record itself
+            try await supabase
+                .from("feed_items")
+                .delete()
+                .eq("id", value: feedItemId)
+                .execute()
+
+            // 7. Update Local Data
+            await MainActor.run {
+                self.feedItems.removeAll { $0.id == feedItemToDelete.id }
+                print("Feed item \(feedItemId) and its associated data deleted successfully.")
+            }
+
+        } catch {
+            print("Error deleting feed item \(feedItemId): \(error)")
+            // Potentially show an error message to the user
+        }
+    }
+
+    private func deleteImageFromStorage(publicUrl: String?, bucketName: String) async {
+        guard let publicUrlString = publicUrl, let url = URL(string: publicUrlString) else {
+            // print("Invalid or missing public URL for image deletion.")
+            return
+        }
+
+        // Assuming the path is the part of the URL after the bucket name
+        // e.g., https://<ref>.supabase.co/storage/v1/object/public/images/feed/image.jpg -> path is "feed/image.jpg"
+        let pathComponents = url.pathComponents
+        if let bucketIndex = pathComponents.firstIndex(of: bucketName), bucketIndex + 1 < pathComponents.count {
+            let imagePath = pathComponents.suffix(from: bucketIndex + 1).joined(separator: "/")
+            
+            if imagePath.isEmpty {
+                // print("Could not extract a valid image path from URL: \(publicUrlString)")
+                return
+            }
+
+            // print("Attempting to delete image from storage at path: \(imagePath) in bucket: \(bucketName)")
+            do {
+                _ = try await supabase.storage
+                    .from(bucketName)
+                    .remove(paths: [imagePath])
+                // print("Successfully deleted image from storage: \(imagePath)")
+            } catch {
+                print("Error deleting image from storage path \(imagePath) in bucket \(bucketName): \(error)")
+            }
+        } else {
+            // print("Could not determine image path from URL: \(publicUrlString) for bucket: \(bucketName)")
         }
     }
 }

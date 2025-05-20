@@ -19,7 +19,7 @@ struct ContentView: View {
                         // Points and profile section
                         HStack {
                             Text("Track Progress")
-                                .font(.tagesschrift(size: 22))
+                                .font(.quicksand(size: 22))
                                 .fontWeight(.bold)
                             
                             Spacer()
@@ -27,9 +27,10 @@ struct ContentView: View {
                             // Points pill
                             HStack(spacing: 4) {
                                 Text("\(dataStore.totalPoints) pts")
-                                    .font(.subheadline)
+                                    .font(.poetsen(size: 16))
                                     .fontWeight(.semibold)
                                     .foregroundColor(.white)
+                                
                             }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
@@ -46,11 +47,11 @@ struct ContentView: View {
                         
                         // Quick action buttons
                         HStack(spacing: 15) {
-                            Button {
+                            /* Button {
                                 navigationPath.append("mealLog")
                             } label: {
                                 QuickActionButtonContent(icon: "fork.knife", title: "Log\nMeal")
-                            }
+                            } */
                             
                             Button {
                                 navigationPath.append("workoutLog")
@@ -77,7 +78,7 @@ struct ContentView: View {
                         // Today's feed section
                         VStack(alignment: .leading, spacing: 10) {
                             Text("Today's Feed")
-                                .font(.tagesschrift(size: 22))
+                                .font(.quicksand(size: 22))
                                 .fontWeight(.bold)
                                 .padding(.horizontal)
                             
@@ -90,7 +91,7 @@ struct ContentView: View {
                                 navigationPath.append("allFeed")
                             } label: {
                                 Text("View All")
-                                    .font(.tagesschrift(size: 16))
+                                    .font(.quicksand(size: 16))
                                     .foregroundColor(.blue)
                                     .frame(maxWidth: .infinity)
                                     .padding()
@@ -103,13 +104,13 @@ struct ContentView: View {
                         // Recent scans section
                         VStack(alignment: .leading, spacing: 15) {
                             Text("Recent Scans")
-                                .font(.tagesschrift(size: 22))
+                                .font(.quicksand(size: 22))
                                 .fontWeight(.bold)
                                 .padding(.horizontal)
                             
                             if dataStore.scanLogs.isEmpty {
                                 Text("No scans yet. Take your first body scan to track your progress!")
-                                    .font(.tagesschrift(size: 14))
+                                    .font(.quicksand(size: 14))
                                     .foregroundColor(.gray)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding()
@@ -147,7 +148,7 @@ struct ContentView: View {
                 .toolbar {
                     ToolbarItem(placement: .principal) {
                         Text("CheckMeOut")
-                            .font(.tagesschrift(size: 16))
+                            .font(.quicksand(size: 16))
                             .foregroundColor(.primary)
                     }
                 }
@@ -189,7 +190,7 @@ struct QuickActionButtonContent: View {
                 .foregroundColor(.black)
             
             Text(title)
-                .font(.tagesschrift(size: 14))
+                .font(.quicksand(size: 14))
                 .multilineTextAlignment(.center)
                 .foregroundColor(.black)
         }
@@ -203,7 +204,9 @@ struct QuickActionButtonContent: View {
 
 struct FeedItemView: View {
     let item: FeedItem
-    
+    @EnvironmentObject var authViewModel: AuthViewModel
+    @State private var showingDeleteConfirmation = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // User info and timestamp
@@ -215,11 +218,11 @@ struct FeedItemView: View {
                 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(item.username)
-                        .font(.tagesschrift(size: 14))
+                        .font(.quicksand(size: 14))
                         .fontWeight(.semibold)
                     
                     Text(timeAgo(from: item.timestamp))
-                        .font(.tagesschrift(size: 12))
+                        .font(.quicksand(size: 12))
                         .foregroundColor(.gray)
                 }
                 
@@ -227,7 +230,7 @@ struct FeedItemView: View {
                 
                 // Activity type badge
                 Text(activityTypeText(item.activityType))
-                    .font(.tagesschrift(size: 12))
+                    .font(.quicksand(size: 12))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(Color.gray.opacity(0.1))
@@ -237,7 +240,7 @@ struct FeedItemView: View {
             // Caption if available
             if let caption = item.caption {
                 Text(caption)
-                    .font(.tagesschrift(size: 14))
+                    .font(.quicksand(size: 14))
             }
             
             // Image if available
@@ -265,7 +268,7 @@ struct FeedItemView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             if let responseText = item.threadResponseText {
                                 Text(responseText)
-                                    .font(.tagesschrift(size: 14))
+                                    .font(.quicksand(size: 14))
                                     .padding(.leading, 8)
                             }
                             
@@ -319,13 +322,13 @@ struct FeedItemView: View {
                                     .foregroundColor(.gray)
                                 
                                 Text(roast.username)
-                                    .font(.tagesschrift(size: 13))
+                                    .font(.quicksand(size: 13))
                                     .fontWeight(.semibold)
                                 
                                 Spacer()
                                 
                                 Text(timeAgo(from: roast.timestamp))
-                                    .font(.tagesschrift(size: 11))
+                                    .font(.quicksand(size: 11))
                                     .foregroundColor(.gray)
                             }
                             .padding(.leading, 8)
@@ -396,7 +399,7 @@ struct FeedItemView: View {
                 // Points display
                 HStack {
                     Text("\(item.points > 0 ? "+" : "")\(item.points) pts")
-                        .font(.caption)
+                        .font(.poetsen(size: 12))
                         .fontWeight(.bold)
                         .foregroundColor(.white)
                 }
@@ -421,6 +424,24 @@ struct FeedItemView: View {
         .cornerRadius(12)
         .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
         .padding(.horizontal)
+        .gesture(
+            LongPressGesture(minimumDuration: 1.0)
+                .onEnded { _ in
+                    if let currentUserID = authViewModel.currentUser?.id, item.userId == currentUserID {
+                        self.showingDeleteConfirmation = true
+                    }
+                }
+        )
+        .alert("Delete Post", isPresented: $showingDeleteConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                Task {
+                    await SupabaseDataStore.shared.deleteFeedItem(feedItemToDelete: item)
+                }
+            }
+        } message: {
+            Text("Are you sure you want to permanently delete this post and all its associated roasts?")
+        }
     }
     
     // Helper functions

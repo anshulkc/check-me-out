@@ -89,7 +89,8 @@ struct SupabaseRoast: Codable, Identifiable {
 
 // Define a model for our activity feed items
 struct FeedItem: Identifiable {
-    let id = UUID()
+    let id: UUID
+    let userId: UUID
     let username: String
     let userAvatar: String // system image name
     let activityType: String // "meal", "workout", "bodycheck"
@@ -111,7 +112,9 @@ struct FeedItem: Identifiable {
     var threadResponseLikes: Int
     
     // Default initializer for regular posts
-    init(username: String, userAvatar: String, activityType: String, timestamp: Date, imageData: Data?, likes: Int, comments: Int, points: Int, caption: String? = nil, roasts: [Roast] = []) {
+    init(id: UUID = UUID(), userId: UUID = UUID(), username: String, userAvatar: String, activityType: String, timestamp: Date, imageData: Data?, likes: Int, comments: Int, points: Int, caption: String? = nil, roasts: [Roast] = []) {
+        self.id = id
+        self.userId = userId
         self.username = username
         self.userAvatar = userAvatar
         self.activityType = activityType
@@ -130,7 +133,9 @@ struct FeedItem: Identifiable {
     }
     
     // Initializer for threaded posts (for backward compatibility)
-    init(username: String, userAvatar: String, activityType: String, timestamp: Date, imageData: Data?, likes: Int, comments: Int, points: Int, caption: String? = nil, originalPostID: UUID, threadResponseText: String?, threadResponseImageData: Data?, threadResponseLikes: Int = 0) {
+    init(id: UUID = UUID(), userId: UUID = UUID(), username: String, userAvatar: String, activityType: String, timestamp: Date, imageData: Data?, likes: Int, comments: Int, points: Int, caption: String? = nil, originalPostID: UUID, threadResponseText: String?, threadResponseImageData: Data?, threadResponseLikes: Int = 0) {
+        self.id = id
+        self.userId = userId
         self.username = username
         self.userAvatar = userAvatar
         self.activityType = activityType
@@ -189,7 +194,17 @@ struct Like: Codable {
     let feedItemId: UUID
     
     enum CodingKeys: String, CodingKey {
-        case id
+        case id = "id"
+        case userId = "user_id"
+        case feedItemId = "feed_item_id"
+    }
+}
+
+struct LikeInsertPayload: Encodable {
+    let userId: UUID
+    let feedItemId: UUID
+
+    enum CodingKeys: String, CodingKey {
         case userId = "user_id"
         case feedItemId = "feed_item_id"
     }
@@ -202,7 +217,17 @@ struct CompletedChallenge: Codable {
     let challengeTitle: String
     
     enum CodingKeys: String, CodingKey {
-        case id
+        case id = "id"
+        case userId = "user_id"
+        case challengeTitle = "challenge_title"
+    }
+}
+
+struct CompletedChallengeInsertPayload: Encodable {
+    let userId: UUID
+    let challengeTitle: String
+
+    enum CodingKeys: String, CodingKey {
         case userId = "user_id"
         case challengeTitle = "challenge_title"
     }

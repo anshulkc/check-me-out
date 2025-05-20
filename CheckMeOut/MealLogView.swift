@@ -65,7 +65,7 @@ struct MealLogView: View {
                         .font(.tagesschriftHeadline)
                     
                     TextField("What are you eating?", text: $mealCaption)
-                        .font(.tagesschrift(size: 16))
+                        .font(.quicksand(size: 16))
                         .padding()
                         .background(Color.gray.opacity(0.1))
                         .cornerRadius(8)
@@ -98,8 +98,8 @@ struct MealLogView: View {
             }
             .alert(isPresented: $showingAlert) {
                 Alert(
-                    title: Text("Meal Logged!").font(.tagesschrift(size: 18)),
-                    message: Text("You earned \(fromChallenge ? 100 : 50) points for logging your meal.\(fromChallenge ? " Challenge completed!" : "")").font(.tagesschrift(size: 14)),
+                    title: Text("Meal Logged!").font(.quicksand(size: 18)),
+                    message: Text("You earned \(fromChallenge ? 100 : 50) points for logging your meal.\(fromChallenge ? " Challenge completed!" : "")").font(.quicksand(size: 14)),
                     dismissButton: .default(Text("OK")) {
                         presentationMode.wrappedValue.dismiss()
                     }

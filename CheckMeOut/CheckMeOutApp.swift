@@ -103,7 +103,7 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 // Account section
-                Section(header: Text("Account").font(.tagesschrift(size: 16)).foregroundColor(.primary)) {
+                Section(header: Text("Account").font(.quicksand(size: 16)).foregroundColor(.primary)) {
                     if let user = authViewModel.currentUser {
                         // Profile info section
                         HStack {
@@ -184,7 +184,7 @@ struct SettingsView: View {
                             HStack {
                                 Image(systemName: "g.circle.fill")
                                     .foregroundColor(.blue)
-                                Text("Sign in with Google").font(.tagesschrift(size: 16))
+                                Text("Sign in with Google").font(.quicksand(size: 16))
                             }
                             .padding(8)
                             .frame(maxWidth: .infinity)
@@ -193,19 +193,19 @@ struct SettingsView: View {
                     }
                 }
                 
-                Section(header: Text("Personal Information").font(.tagesschrift(size: 16)).foregroundColor(.primary)) {
-                    Picker(selection: $userGender, label: Text("Gender").font(.tagesschrift(size: 16))) {
-                        Text("Male").font(.tagesschrift(size: 16)).tag("Male")
-                        Text("Female").font(.tagesschrift(size: 16)).tag("Female")
-                        Text("Other").font(.tagesschrift(size: 16)).tag("Other")
+                Section(header: Text("Personal Information").font(.quicksand(size: 16)).foregroundColor(.primary)) {
+                    Picker(selection: $userGender, label: Text("Gender").font(.quicksand(size: 16))) {
+                        Text("Male").font(.quicksand(size: 16)).tag("Male")
+                        Text("Female").font(.quicksand(size: 16)).tag("Female")
+                        Text("Other").font(.quicksand(size: 16)).tag("Other")
                     }
                     
                     VStack(alignment: .leading) {
                         Text("Age: \(userAge) yrs")
-                            .font(.tagesschrift(size: 16))
+                            .font(.quicksand(size: 16))
                         Picker("", selection: $userAge) {
                             ForEach(Array(stride(from: 13, through: 100, by: 1)), id: \.self) { h in
-                                Text("\(h) yrs").font(.tagesschrift(size: 14))
+                                Text("\(h) yrs").font(.quicksand(size: 14))
                                     .tag(h)
                             }
                         }
@@ -216,10 +216,10 @@ struct SettingsView: View {
                     
                     VStack(alignment: .leading) {
                         Text("Height: \(userHeight, specifier: "%.1f") in")
-                            .font(.tagesschrift(size: 16))
+                            .font(.quicksand(size: 16))
                         Picker("", selection: $userHeight) {
                             ForEach(Array(stride(from: 24.0, through: 100.0, by: 0.5)), id: \.self) { h in
-                                Text("\(h, specifier: "%.1f") in").font(.tagesschrift(size: 14))
+                                Text("\(h, specifier: "%.1f") in").font(.quicksand(size: 14))
                                     .tag(h)
                             }
                         }
@@ -230,11 +230,11 @@ struct SettingsView: View {
 
     VStack(alignment: .leading) {
                        Text("Weight: \(userWeight, specifier: "%.1f") lbs")
-                        .font(.tagesschrift(size: 16))
+                        .font(.quicksand(size: 16))
                        Picker("", selection: $userWeight) {
                            ForEach(Array(stride(from: 30.0, through: 500.0, by: 0.5)), id: \.self) { w in
                                Text("\(w, specifier: "%.1f") lbs")
-                                   .font(.tagesschrift(size: 14))
+                                   .font(.quicksand(size: 14))
                                    .tag(w)
                            }
                        }
@@ -244,23 +244,23 @@ struct SettingsView: View {
                    }
                 }
                 
-                Section(header: Text("About").font(.tagesschrift(size: 16)).foregroundColor(.primary)) {
+                Section(header: Text("About").font(.quicksand(size: 16)).foregroundColor(.primary)) {
                     HStack {
-                        Text("Version").font(.tagesschrift(size: 16))
+                        Text("Version").font(.quicksand(size: 16))
                         Spacer()
-                        Text("1.0.0").font(.tagesschrift(size: 14))
+                        Text("1.0.0").font(.quicksand(size: 14))
                             .foregroundColor(.gray)
                     }
                     
                     NavigationLink("Privacy Policy") {
                         PrivacyPolicyView()   // swap in a PrivacyPolicyView if you make one
                     }
-                    .font(.tagesschrift(size: 16))
+                    .font(.quicksand(size: 16))
 
                     NavigationLink("Terms of Service") {
                         TermsOfServiceView()
                     }
-                    .font(.tagesschrift(size: 16))
+                    .font(.quicksand(size: 16))
                     
                 }
             }
@@ -274,7 +274,7 @@ struct SettingsView: View {
                 }
                 ToolbarItem(placement: .principal) {
                     Text("CheckMeOut")
-                        .font(.tagesschrift(size: 16))
+                        .font(.quicksand(size: 16))
                         .foregroundColor(.primary)
                 }
             }

@@ -46,7 +46,7 @@ struct ChallengesView: View {
             points: 100,
             iconName: "person.fill.questionmark",
             isCompleted: false,
-            negativeEffect: "-50 points to friend"
+            negativeEffect: "-50 pts -> friend"
         ),
         Challenge(
             title: "Log a meal",
@@ -64,7 +64,7 @@ struct ChallengesView: View {
                     // Header with total points
                     HStack {
                         Text("Daily Challenges")
-                            .font(.tagesschriftTitle)
+                            .font(.quicksand(size: 22))
                             .fontWeight(.bold)
                         
                         Spacer()
@@ -75,11 +75,18 @@ struct ChallengesView: View {
                                 .font(.tagesschriftSubheadline)
                                 .fontWeight(.semibold)
                                 .foregroundColor(.white)
+                            
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
                         .background(Color(UIColor.darkGray))
                         .cornerRadius(20)
+                        
+                        // Profile icon
+                        Image(systemName: "person.circle.fill")
+                            .resizable()
+                            .frame(width: 30, height: 30)
+                            .foregroundColor(.gray)
                     }
                     .padding(.horizontal)
                     
@@ -97,7 +104,7 @@ struct ChallengesView: View {
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Text("CheckMeOut")
-                        .font(.tagesschrift(size: 18))
+                        .font(.quicksand(size: 16))
                         .foregroundColor(.primary)
                 }
             }
@@ -185,10 +192,10 @@ struct ChallengesView: View {
                     
                     VStack(alignment: .leading, spacing: 4) {
                         Text(challenge.title)
-                            .font(.tagesschriftTitle)
+                            .font(.quicksand(size: 20))
                         
                         Text(challenge.description)
-                            .font(.tagesschriftSubheadline)
+                            .font(.quicksand(size: 16))
                             .foregroundColor(.gray)
                     }
                     
@@ -219,8 +226,8 @@ struct ChallengesView: View {
                     // Complete button
                     Button(action: action) {
                         Text(challenge.isCompleted ? "Completed" : "Start Challenge")
-                            .font(.tagesschriftSubheadline)
-                            .fontWeight(.semibold)
+                            .font(.quicksand(size: 16))
+                            .fontWeight(.bold)
                             .foregroundColor(challenge.isCompleted ? .gray : .white)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 8)
