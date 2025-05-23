@@ -21,7 +21,8 @@ Points, streaks, badges — all designed to keep you and your friends moving.
 | Frontend | Backend       | Database   | Auth & Storage   |
 | -------- | ------------- | ---------- | ---------------- |
 | SwiftUI  | Supabase Edge | PostgreSQL | Supabase Auth    |
-|          | Supabase RPC  | Realtime   | Supabase Storage |
+|          | Supabase RPC  |    | Supabase Storage |
+|          |   |    | Google Auth |
 
 
 ### Get started:
