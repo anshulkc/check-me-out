@@ -1,6 +1,6 @@
 # CheckMeOut
 
-CheckMeOut is a full-stack mobile app that gamifies fitness and community engagement; think Strava meets Reddit. Built with SwiftUI and powered by Supabase, the app enables users to track workouts, post daily check-ins, compete on leaderboards, and support friends on their health journeys.
+🏋️‍♀️ CheckMeOut is a full-stack mobile app that gamifies fitness and community engagement; think Strava meets Reddit. Built with SwiftUI and powered by Supabase, the app enables users to track workouts, post daily check-ins, compete on leaderboards, and support friends on their health journeys.
 
 ### Real-time Workout Logging:
 Track runs, lifts, and other workouts with a clean SwiftUI interface.
