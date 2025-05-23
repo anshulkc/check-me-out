@@ -29,8 +29,8 @@ Points, streaks, badges — all designed to keep you and your friends moving.
 
 1. Clone the Repo:
 
-git clone https://github.com/your-username/checkmeout.git
-cd checkmeout
+- git clone https://github.com/your-username/checkmeout.git
+- cd checkmeout
 
 
 2. Open in Xcode
