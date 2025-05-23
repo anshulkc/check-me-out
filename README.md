@@ -29,7 +29,7 @@ Points, streaks, badges — all designed to keep you and your friends moving.
 
 1. Clone the Repo:
 
-- git clone [https://github.com/your-username/checkmeout.git](https://github.com/anshulkc/check-me-out.git)
+- git clone https://github.com/anshulkc/check-me-out.git
 - cd checkmeout
 
 
