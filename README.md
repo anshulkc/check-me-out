@@ -14,7 +14,7 @@ Climb the ranks based on your activity score and daily consistency.
 ### Secure Auth & Storage (Supabase):
 Email/password login, OAuth, and real-time sync with PostgreSQL.
 
-###Gamified Health Journey:
+### Gamified Health Journey:
 Points, streaks, badges — all designed to keep you and your friends moving.
 
 ### Tech Stack: 
