@@ -1,41 +1,52 @@
-# CheckMeOut
+# CheckMeOut 🏋️‍♀️
 
-🏋️‍♀️ CheckMeOut is a full-stack mobile app that gamifies fitness and community engagement; think Strava meets Reddit. Built with SwiftUI and powered by Supabase, the app enables users to track workouts, post daily check-ins, compete on leaderboards, and support friends on their health journeys.
+A full-stack iOS app that gamifies fitness and community engagement — think Strava meets Reddit. Track workouts, post daily check-ins, compete on leaderboards, and cheer on friends as they build healthier habits.
 
-### Real-time Workout Logging:
-Track runs, lifts, and other workouts with a clean SwiftUI interface.
+Built with SwiftUI and powered by Supabase.
 
-### Community Feed:
-Share daily check-ins, comment, and react to your friends’ progress.
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/62ebe107-e2da-4058-be59-30dd4955682a" width="300" alt="CheckMeOut screenshot 1" />
+  <img src="https://github.com/user-attachments/assets/333ec49d-cd7c-4b5b-ae3d-daac06a14fe8" width="300" alt="CheckMeOut screenshot 2" />
+</p>
 
-### Global & Friend Leaderboards:
-Climb the ranks based on your activity score and daily consistency.
+## Features
 
-### Secure Auth & Storage (Supabase):
-Email/password login, OAuth, and real-time sync with PostgreSQL.
+- **Real-time workout logging** — Track runs, lifts, and other workouts through a clean SwiftUI interface.
+- **Community feed** — Share daily check-ins, comment, and react to friends' progress.
+- **Global & friend leaderboards** — Climb the ranks based on activity score and daily consistency.
+- **Secure auth & storage** — Email/password, Google OAuth, and real-time sync via Supabase + PostgreSQL.
+- **Gamified health journey** — Points, streaks, and badges designed to keep you (and your friends) moving.
 
-### Gamified Health Journey:
-Points, streaks, badges — all designed to keep you and your friends moving.
+## Tech Stack
 
-### Tech Stack: 
-| Frontend | Backend       | Database   | Auth & Storage   |
-| -------- | ------------- | ---------- | ---------------- |
-| SwiftUI  | Supabase Edge | PostgreSQL | Supabase Auth    |
-|          | Supabase RPC  |    | Supabase Storage |
-|          |   |    | Google Auth |
+| Layer            | Technology                                      |
+| ---------------- | ----------------------------------------------- |
+| Frontend         | SwiftUI                                         |
+| Backend          | Supabase Edge Functions, Supabase RPC           |
+| Database         | PostgreSQL                                      |
+| Auth & Storage   | Supabase Auth, Supabase Storage, Google OAuth   |
 
+## Getting Started
 
-### Get started:
+### 1. Clone the repo
 
-1. Clone the Repo:
+```bash
+git clone https://github.com/anshulkc/check-me-out.git
+cd check-me-out
+```
 
-- git clone https://github.com/anshulkc/check-me-out.git
-- cd checkmeout
+### 2. Open in Xcode
 
+Open `CheckMeOut.xcodeproj` (or `CheckMeOut.xcworkspace` if using Swift Packages).
 
-2. Open in Xcode
-- Open CheckMeOut.xcodeproj or CheckMeOut.xcworkspace if using Swift Packages.
+### 3. Configure Supabase
 
-3. Configure Supabase
+Add your Supabase URL and anon key to the project's configuration file. *(See `Config.example.swift` for the expected format.)*
 
-4. Run on Simulator or Device
+### 4. Run
+
+Build and run on the iOS Simulator or a physical device (⌘R).
+
+## License
+
+MIT
